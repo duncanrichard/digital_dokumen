@@ -232,19 +232,22 @@
                               </td>
 
                               <td class="text-center">
-                                @php $fileUrl = $row->file_path ? asset('storage/'.$row->file_path) : null; @endphp
-                                @if($fileUrl)
-                                  <div class="btn-group btn-group-sm" role="group">
-                                    <a href="{{ $fileUrl }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-action" title="View">
-                                      <i class="mdi mdi-eye"></i>
-                                    </a>
-                                    <a href="{{ $fileUrl }}" download class="btn btn-outline-secondary btn-action" title="Download">
-                                      <i class="mdi mdi-download"></i>
-                                    </a>
-                                  </div>
-                                @else
-                                  <span class="text-muted small">—</span>
-                                @endif
+                                <div class="btn-group btn-group-sm" role="group">
+                                  {{-- VIEW (inline) via stream() agar watermark aktif --}}
+                                  <a href="{{ route('documents.file', $row->id) }}"
+                                     target="_blank" rel="noopener"
+                                     class="btn btn-outline-primary btn-action"
+                                     title="View">
+                                    <i class="mdi mdi-eye"></i>
+                                  </a>
+
+                                  {{-- DOWNLOAD (attachment) juga lewat stream(), tambahkan ?dl=1 --}}
+                                  <a href="{{ route('documents.file', [$row->id, 'dl' => 1]) }}"
+                                     class="btn btn-outline-secondary btn-action"
+                                     title="Download">
+                                    <i class="mdi mdi-download"></i>
+                                  </a>
+                                </div>
                               </td>
 
                               <td class="text-center">

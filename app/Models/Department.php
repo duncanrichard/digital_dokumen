@@ -35,4 +35,5 @@ class Department extends Model
             }
         });
     }
+    
 }

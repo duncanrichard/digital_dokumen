@@ -6,11 +6,33 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Concerns\HasUuids; // Penting untuk ID UUID
+use Illuminate\Support\Facades\Hash; // Untuk hashing password
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable;
+    use HasFactory, Notifiable, HasUuids; // Tambahkan HasUuids
+
+    /**
+     * The table associated with the model.
+     *
+     * @var string
+     */
+    protected $table = 'users'; // Sesuaikan dengan nama tabel Anda
+
+    /**
+     * Indicates if the IDs are auto-incrementing.
+     *
+     * @var bool
+     */
+    public $incrementing = false; // Karena kita pakai UUID
+
+    /**
+     * The "type" of the primary key ID.
+     *
+     * @var string
+     */
+    protected $keyType = 'string'; // Karena kita pakai UUID
 
     /**
      * The attributes that are mass assignable.
@@ -19,8 +41,10 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
-        'email',
+        'username',
         'password',
+        'department_id',
+        'is_active',
     ];
 
     /**
@@ -39,7 +63,41 @@ class User extends Authenticatable
      * @var array<string, string>
      */
     protected $casts = [
-        'email_verified_at' => 'datetime',
-        'password' => 'hashed',
+        'is_active' => 'boolean',
+        'password' => 'hashed', // Otomatis hash jika di-assign
     ];
+
+    /**
+     * Relasi ke Department.
+     */
+    public function department()
+    {
+        return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    /**
+     * Scope untuk search.
+     */
+    public function scopeSearch($query, $term)
+    {
+        if (!$term) {
+            return $query;
+        }
+        $term = mb_strtolower($term);
+        return $query->where(function ($q) use ($term) {
+            $q->whereRaw('LOWER(name) LIKE ?', ["%{$term}%"])
+              ->orWhereRaw('LOWER(username) LIKE ?', ["%{$term}%"]);
+        });
+    }
+
+    /**
+     * Scope untuk status.
+     */
+    public function scopeStatus($query, $status)
+    {
+        if ($status === null || $status === '') {
+            return $query;
+        }
+        return $query->where('is_active', (bool)$status);
+    }
 }

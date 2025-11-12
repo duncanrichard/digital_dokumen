@@ -12,7 +12,9 @@
     "guzzlehttp/guzzle": "^7.2",
     "laravel/framework": "^10.23",
     "laravel/sanctum": "^3.2",
-    "laravel/tinker": "^2.8"
+    "laravel/tinker": "^2.8",
+    "setasign/fpdi": "^2.6",
+    "setasign/fpdi-fpdf": "2.3"
   },
   "require-dev": {
     "fakerphp/faker": "^1.9.1",
