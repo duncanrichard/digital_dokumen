@@ -1,0 +1,65 @@
+# ==========================================
+# LARAVEL DEFAULT DIRECTORIES
+# ==========================================
+/vendor/
+/node_modules/
+
+# Laravel storage (kecuali public)
+storage/*.key
+/storage/*.key
+/storage/logs
+/storage/framework
+/storage/app/public
+
+# Public build artefacts
+/public/storage
+/public/build
+/public/hot
+
+# Composer & PHPUnit
+.phpunit.result.cache
+/.phpunit.cache
+
+# Laravel mix & vite
+/public/mix-manifest.json
+
+# ==========================================
+# ENVIRONMENT FILES (SANGAT PENTING)
+# ==========================================
+.env
+.env.*
+.env.backup
+.env.production
+
+# ==========================================
+# IGNORE DEVELOPMENT FILES
+# ==========================================
+/.idea
+/.vscode
+npm-debug.log
+node-debug.log
+yarn-error.log
+yarn.lock
+package-lock.json
+package-lock.log
+
+# ==========================================
+# DOCKER & HOMESTEAD
+# ==========================================
+docker-compose.override.yml
+Homestead.json
+Homestead.yaml
+
+# ==========================================
+# PUBLIC ASSETS BUILD RESULT
+# (Hanya simpan folder assets asli)
+# ==========================================
+/public/css
+/public/js
+!/public/assets/*
+/public/assets/js
+/public/assets/css
+/public/assets/vendor
+
+# Keep original static assets
+# public/assets/<your custom files> tetap tersimpan
