@@ -14,6 +14,7 @@ class DocumentDistribution extends Model
     protected $fillable = [
         'document_id',
         'department_id',
+        'is_active',
         'created_at',
         'updated_at',
     ];

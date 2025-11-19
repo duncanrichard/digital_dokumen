@@ -47,7 +47,7 @@ class UserController extends Controller
         $validated = $request->validate([
             'name'          => ['required', 'string', 'max:100'],
             'username'      => ['required', 'string', 'max:150', 'unique:users,username'],
-            // jika ingin ketat: 'uuid' — bisa dihapus kalau pakai tipe lain di DB
+            'email'         => ['required', 'string', 'email', 'max:191', 'unique:users,email'],
             'department_id' => ['nullable', 'exists:departments,id'],
             'password'      => ['required', 'confirmed', Rules\Password::defaults()],
             // checkbox "1" saat dicentang; biarkan nullable agar unchecked tidak error
@@ -58,6 +58,7 @@ class UserController extends Controller
             User::create([
                 'name'          => $validated['name'],
                 'username'      => $validated['username'],
+                'email'         => $validated['email'],
                 'department_id' => $validated['department_id'] ?? null,
                 // password akan di-hash oleh mutator di Model User
                 'password'      => $validated['password'],
@@ -78,6 +79,7 @@ class UserController extends Controller
         $validated = $request->validate([
             'name'          => ['required', 'string', 'max:100'],
             'username'      => ['required', 'string', 'max:150', 'unique:users,username,' . $user->getKey()],
+            'email'         => ['required', 'string', 'email', 'max:191', 'unique:users,email,' . $user->getKey()],
             'department_id' => ['nullable', 'exists:departments,id'],
             'password'      => ['nullable', 'confirmed', Rules\Password::defaults()],
             'is_active'     => ['nullable', 'in:1'],
@@ -87,6 +89,7 @@ class UserController extends Controller
             $payload = [
                 'name'          => $validated['name'],
                 'username'      => $validated['username'],
+                'email'         => $validated['email'],
                 'department_id' => $validated['department_id'] ?? null,
                 // PENTING: perbaikan status
                 'is_active'     => $request->has('is_active'),

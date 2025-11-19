@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Documents;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rule;
 use App\Models\Document;
 use App\Models\DocumentDistribution;
 use App\Models\Department;
+use App\Models\User;
+use App\Mail\DocumentDistributionMail;
 
 class DocumentDistributionController extends Controller
 {
@@ -43,7 +46,14 @@ class DocumentDistributionController extends Controller
             ->orderBy('publish_date', 'desc')
             ->orderBy('created_at', 'desc')
             ->limit(500)
-            ->get(['id','document_number','name','revision','publish_date','is_active']);
+            ->get([
+                'id',
+                'document_number',
+                'name',
+                'revision',
+                'publish_date',
+                'is_active',
+            ]);
 
         // Default pilih dokumen pertama di list aktif bila parameter tidak ada
         if ($documentId === '' && $docs->isNotEmpty()) {
@@ -58,25 +68,32 @@ class DocumentDistributionController extends Controller
         // Hanya departemen aktif
         $departments = Department::where('is_active', true)
             ->orderBy('name')
-            ->get(['id','name']);
+            ->get(['id', 'name']);
 
-        // Departemen yang sudah di-distribute utk dokumen terpilih
-        $selectedDepartments = $selectedDoc
-            ? DocumentDistribution::where('document_id', $selectedDoc->id)->pluck('department_id')->all()
-            : [];
+        // Distribusi yang sudah ada utk dokumen terpilih
+        $distributions = $selectedDoc
+            ? DocumentDistribution::where('document_id', $selectedDoc->id)->get()
+            : collect();
+
+        // Array id departemen yang sudah di-distribute (untuk checkbox)
+        $selectedDepartments = $distributions->pluck('department_id')->all();
+
+        // Map distribution per departemen (supaya di view bisa cek is_active, dsb)
+        $distributionsByDepartment = $distributions->keyBy('department_id');
 
         return view('documents.distribution.index', [
-            'q'                   => $q,
-            'documents'           => $docs,
-            'documentId'          => $documentId,
-            'selectedDoc'         => $selectedDoc,
-            'departments'         => $departments,
-            'selectedDepartments' => $selectedDepartments,
+            'q'                       => $q,
+            'documents'               => $docs,
+            'documentId'              => $documentId,
+            'selectedDoc'             => $selectedDoc,
+            'departments'             => $departments,
+            'selectedDepartments'     => $selectedDepartments,
+            'distributionsByDepartment' => $distributionsByDepartment,
         ]);
     }
 
     /**
-     * Simpan mapping distribution (sinkron).
+     * Simpan mapping distribution (sinkron) + kirim email ke user di departemen terkait.
      * Validasi hanya mengizinkan dokumen & departemen yang aktif.
      */
     public function store(Request $request)
@@ -97,29 +114,67 @@ class DocumentDistributionController extends Controller
             'department_id' => 'Departemen',
         ]);
 
-        $documentId = (string) $data['document_id'];
-        $deptIds    = array_values(array_unique(array_map('strval', $data['department_id'] ?? [])));
+        $documentId   = (string) $data['document_id'];
+        $deptIds      = array_values(array_unique(array_map('strval', $data['department_id'] ?? [])));
+        $activeStatus = $request->input('active_status', []); // [department_id => 'on']
 
-        DB::transaction(function () use ($documentId, $deptIds) {
+        // 1. Simpan distribusi di DB (sinkron: hapus lama, insert baru)
+        DB::transaction(function () use ($documentId, $deptIds, $activeStatus) {
             // Hapus semua distribusi lama dokumen ini
             DocumentDistribution::where('document_id', $documentId)->delete();
 
             if (!empty($deptIds)) {
                 $now  = now();
-                $rows = array_map(fn($d) => [
-                    'document_id'   => $documentId,
-                    'department_id' => $d,
-                    'created_at'    => $now,
-                    'updated_at'    => $now,
-                ], $deptIds);
+                $rows = [];
+
+                foreach ($deptIds as $d) {
+                    $rows[] = [
+                        'document_id'   => $documentId,
+                        'department_id' => $d,
+                        'is_active'     => isset($activeStatus[$d]), // TRUE kalau switch aktif
+                        'created_at'    => $now,
+                        'updated_at'    => $now,
+                    ];
+                }
 
                 // Bulk insert
                 DocumentDistribution::insert($rows);
             }
         });
 
+        // 2. Kirim email ke user aktif di departemen terpilih yang distribusinya AKTIF
+        if (!empty($deptIds)) {
+            $document = Document::find($documentId);
+
+            if ($document) {
+                // Ambil hanya departemen yang distribusinya is_active = true
+                $activeDeptIds = DocumentDistribution::where('document_id', $documentId)
+                    ->whereIn('department_id', $deptIds)
+                    ->where('is_active', true)
+                    ->pluck('department_id')
+                    ->all();
+
+                if (!empty($activeDeptIds)) {
+                    $departments = Department::with(['users' => function ($q) {
+                            $q->where('is_active', true)
+                              ->whereNotNull('email');
+                        }])
+                        ->whereIn('id', $activeDeptIds)
+                        ->get();
+
+                    foreach ($departments as $department) {
+                        foreach ($department->users as $user) {
+                            Mail::to($user->email)->send(
+                                new DocumentDistributionMail($document, $department, $user)
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         return redirect()
             ->route('documents.distribution.index', ['document_id' => $documentId])
-            ->with('success', 'Distribusi dokumen berhasil disimpan.');
+            ->with('success', 'Distribusi dokumen berhasil disimpan. Email hanya dikirim ke departemen yang distribusinya aktif.');
     }
 }

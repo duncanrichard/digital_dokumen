@@ -4,7 +4,7 @@
       "url": "/",
       "name": "Dashboard",
       "icon": "menu-icon tf-icons mdi mdi-home-outline",
-      "slug": "Dashboard",
+      "slug": "dashboard",
       "submenu": [
         { "url": "/", "name": "Analytics", "slug": "dashboard-analytics" }
       ]
@@ -16,13 +16,11 @@
       "icon": "menu-icon tf-icons mdi mdi-file-document-outline",
       "slug": "document-control",
       "submenu": [
-        { "url": "/documents/upload",      "name": "Document Library",     "slug": "document-control-upload" },
-        { "url": "/documents/distribution","name": "Distribution",         "slug": "document-control-distribution" },
-        { "url": "/documents/revisions",   "name": "Revisions",            "slug": "document-control-revisions" }
+        { "url": "/documents/upload",       "name": "Document Library", "slug": "document-control-upload" },
+        { "url": "/documents/distribution", "name": "Distribution",     "slug": "document-control-distribution" },
+        { "url": "/documents/revisions",    "name": "Revisions",        "slug": "document-control-revisions" }
       ]
     },
-
-  
 
     {
       "url": "javascript:void(0);",
@@ -30,10 +28,10 @@
       "icon": "menu-icon tf-icons mdi mdi-database-outline",
       "slug": "master-data",
       "submenu": [
-        { "url": "/master/jenis-dokumen", "name": "Document Types", "slug": "master-jenis-dokumen" },
-        { "url": "/master/departments",   "name": "Departments",    "slug": "master-departments" },
-        { "url": "/master/tags",          "name": "Tags & Keywords","slug": "master-tags" },
-        { "url": "/master/locations",     "name": "Physical Locations","slug": "master-locations" }
+        { "url": "/master/jenis-dokumen", "name": "Document Types",      "slug": "master-jenis-dokumen" },
+        { "url": "/master/departments",   "name": "Departments",         "slug": "master-departments" },
+        { "url": "/master/tags",          "name": "Tags & Keywords",     "slug": "master-tags" },
+        { "url": "/master/locations",     "name": "Physical Locations",  "slug": "master-locations" }
       ]
     },
 
@@ -43,9 +41,9 @@
       "icon": "menu-icon tf-icons mdi mdi-account-lock-outline",
       "slug": "user-access",
       "submenu": [
-        { "url": "/access/users",  "name": "Users",  "slug": "access-users" },
-        { "url": "/access/roles",  "name": "Roles",  "slug": "access-roles" },
-        { "url": "/access/rules",  "name": "Rules",  "slug": "access-rules" }
+        { "url": "/access/users", "name": "Users", "slug": "access-users" },
+        { "url": "/access/roles", "name": "Roles", "slug": "access-roles" },
+        { "url": "/access/rules", "name": "Rules", "slug": "access-rules" }
       ]
     },
 
@@ -55,8 +53,9 @@
       "icon": "menu-icon tf-icons mdi mdi-cog-outline",
       "slug": "settings",
       "submenu": [
-        { "url": "/settings/notifications", "name": "Notifications", "slug": "settings-notifications" },
-        { "url": "/settings/watermark",     "name": "Watermark/DRM", "slug": "settings-watermark" }
+        { "url": "/settings/notifications", "name": "Notifications",   "slug": "settings-notifications" },
+        { "url": "/settings/watermark",     "name": "Watermark/DRM",   "slug": "settings-watermark" },
+        { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" }
       ]
     }
   ]

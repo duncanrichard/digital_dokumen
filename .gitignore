@@ -1,34 +1,65 @@
-/.phpunit.cache
-/node_modules
+# ==========================================
+# LARAVEL DEFAULT DIRECTORIES
+# ==========================================
+/vendor/
+/node_modules/
 
+# Laravel storage (kecuali public)
+storage/*.key
+/storage/*.key
+/storage/logs
+/storage/framework
+/storage/app/public
+
+# Public build artefacts
+/public/storage
 /public/build
 /public/hot
-/public/storage
-/storage/*.key
-/vendor
 
-# .env
+# Composer & PHPUnit
+.phpunit.result.cache
+/.phpunit.cache
+
+# Laravel mix & vite
+/public/mix-manifest.json
+
+# ==========================================
+# ENVIRONMENT FILES (SANGAT PENTING)
+# ==========================================
+.env
+.env.*
 .env.backup
 .env.production
-.phpunit.result.cache
 
-docker-compose.override.yml
-
-Homestead.json
-Homestead.yaml
-npm-debug.log
-/package-lock.json
-yarn-error.log
-yarn.lock
-package-lock.log
+# ==========================================
+# IGNORE DEVELOPMENT FILES
+# ==========================================
 /.idea
 /.vscode
+npm-debug.log
+node-debug.log
+yarn-error.log
+yarn.lock
+package-lock.json
+package-lock.log
 
+# ==========================================
+# DOCKER & HOMESTEAD
+# ==========================================
+docker-compose.override.yml
+Homestead.json
+Homestead.yaml
+
+# ==========================================
+# PUBLIC ASSETS BUILD RESULT
+# (Hanya simpan folder assets asli)
+# ==========================================
 /public/css
 /public/js
-/public/mix-manifest.json
-# But not these files...
 !/public/assets/*
 /public/assets/js
 /public/assets/css
 /public/assets/vendor
+
+# Keep original static assets
+# public/assets/<your custom files> tetap tersimpan

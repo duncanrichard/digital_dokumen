@@ -45,11 +45,13 @@
       <form method="GET" action="{{ route('documents.distribution.index') }}" class="d-flex gap-2">
         <input type="text" name="q" value="{{ $q }}" class="form-control form-control-sm"
                placeholder="Cari no / nama dokumen...">
-        <button class="btn btn-outline-secondary btn-sm" title="Cari">
+        <button class="btn btn-outline-secondary btn-sm" title="Cari dokumen berdasarkan nomor atau nama">
           <i class="mdi mdi-magnify"></i>
         </button>
         @if($q !== '')
-          <a href="{{ route('documents.distribution.index') }}" class="btn btn-outline-secondary btn-sm" title="Reset">
+          <a href="{{ route('documents.distribution.index') }}"
+             class="btn btn-outline-secondary btn-sm"
+             title="Reset pencarian dokumen">
             <i class="mdi mdi-refresh"></i>
           </a>
         @endif
@@ -74,7 +76,11 @@
           </select>
 
           @if($documentId)
-            <a href="{{ route('documents.distribution.index') }}" class="btn btn-outline-secondary">Ganti</a>
+            <a href="{{ route('documents.distribution.index') }}"
+               class="btn btn-outline-secondary"
+               title="Ganti dokumen yang sedang diatur distribusinya">
+              Ganti
+            </a>
           @endif
         </div>
       </form>
@@ -100,21 +106,46 @@
           <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
             <label class="form-label mb-0">Pilih Departemen Penerima</label>
             <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="checkAllDeps">
+              <input class="form-check-input"
+                     type="checkbox"
+                     id="checkAllDeps"
+                     title="Centang untuk memilih semua departemen sebagai penerima dokumen">
               <label class="form-check-label" for="checkAllDeps">Pilih semua departemen</label>
             </div>
           </div>
 
           <div class="row" id="depsGrid">
             @forelse($departments as $dep)
-              <div class="col-md-4 col-lg-3 mb-2">
-                <div class="form-check">
-                  <input class="form-check-input dep-checkbox" type="checkbox"
-                         name="department_id[]"
-                         id="dep_{{ $dep->id }}"
-                         value="{{ $dep->id }}"
-                         @checked(in_array($dep->id, $selectedDepartments))>
-                  <label class="form-check-label" for="dep_{{ $dep->id }}">{{ $dep->name }}</label>
+              @php
+                $dist          = $distributionsByDepartment[$dep->id] ?? null;
+                $isChecked     = in_array($dep->id, $selectedDepartments);
+                $isActiveEmail = $dist?->is_active ?? false;
+              @endphp
+              <div class="col-md-4 col-lg-3 mb-3">
+                <div class="border rounded p-2 d-flex justify-content-between align-items-center dep-item">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input dep-checkbox"
+                           type="checkbox"
+                           name="department_id[]"
+                           id="dep_{{ $dep->id }}"
+                           value="{{ $dep->id }}"
+                           @checked($isChecked)
+                           title="Centang untuk mengikutkan Departemen {{ $dep->name }} dalam distribusi dokumen">
+                    <label class="form-check-label" for="dep_{{ $dep->id }}">
+                      {{ $dep->name }}
+                    </label>
+                  </div>
+
+                  {{-- Switch: Active / Tidak untuk kirim email --}}
+                  <div class="form-check form-switch mb-0 ms-2">
+                    <input class="form-check-input dep-active-switch"
+                           type="checkbox"
+                           name="active_status[{{ $dep->id }}]"
+                           id="dep_active_{{ $dep->id }}"
+                           @checked($isActiveEmail)
+                           @if(!$isChecked) disabled @endif
+                           title="ON: kirim email ke user Departemen {{ $dep->name }}. OFF: distribusi tersimpan tanpa mengirim email">
+                  </div>
                 </div>
               </div>
             @empty
@@ -123,11 +154,20 @@
           </div>
 
           <div class="mt-4 d-flex gap-2">
-            <button class="btn btn-primary">
+            <button class="btn btn-primary"
+                    title="Simpan pengaturan distribusi dan kirim email sesuai status aktif/nonaktif">
               <i class="mdi mdi-content-save-outline me-1"></i> Simpan Distribusi
             </button>
             <a href="{{ route('documents.distribution.index', ['document_id'=>$selectedDoc->id]) }}"
-               class="btn btn-outline-secondary">Reset</a>
+               class="btn btn-outline-secondary"
+               title="Kembalikan pengaturan distribusi ke kondisi awal">
+              Reset
+            </a>
+          </div>
+
+          <div class="mt-2 text-muted small">
+            Catatan: Hanya departemen yang <strong>dicentang</strong> dan switch kirim email-nya
+            <strong>aktif</strong> yang akan dikirimi email notifikasi.
           </div>
         </form>
       @endif
@@ -159,8 +199,6 @@
           width: '100%',
           placeholder: $el.data('placeholder') || 'Pilih dokumen...',
           allowClear: true,
-          // Supaya dropdown muncul di atas card dan tidak terpotong,
-          // gunakan container card-body sebagai parent.
           dropdownParent: $el.closest('.card')
         });
 
@@ -173,14 +211,13 @@
 
     // ====== Check All Departemen ======
     function initCheckAll() {
-      const master = document.getElementById('checkAllDeps');
+      const master   = document.getElementById('checkAllDeps');
       const depBoxes = Array.from(document.querySelectorAll('.dep-checkbox'));
 
       if (!master || depBoxes.length === 0) return;
 
-      // Set status awal master checkbox
       function refreshMasterState() {
-        const total = depBoxes.length;
+        const total   = depBoxes.length;
         const checked = depBoxes.filter(cb => cb.checked).length;
 
         if (checked === 0) {
@@ -198,14 +235,48 @@
       // Saat master diubah -> set semua
       master.addEventListener('change', function() {
         const targetChecked = master.checked;
-        depBoxes.forEach(cb => { cb.checked = targetChecked; });
-        // setelah set semua, pastikan indeterminate false
+
+        depBoxes.forEach(cb => {
+          cb.checked = targetChecked;
+          const wrapper = cb.closest('.dep-item');
+          const sw = wrapper ? wrapper.querySelector('.dep-active-switch') : null;
+          if (sw) {
+            sw.disabled = !targetChecked;
+            // default: kalau diaktifkan massal, switch ikut aktif
+            sw.checked = targetChecked;
+          }
+        });
+
         master.indeterminate = false;
       });
 
-      // Saat checkbox per departemen diubah -> sync master
+      // Saat checkbox per departemen diubah -> sync master & switch
       depBoxes.forEach(cb => {
-        cb.addEventListener('change', refreshMasterState);
+        cb.addEventListener('change', function() {
+          const wrapper = cb.closest('.dep-item');
+          const sw = wrapper ? wrapper.querySelector('.dep-active-switch') : null;
+
+          if (sw) {
+            if (cb.checked) {
+              sw.disabled = false;
+              // kalau sebelumnya tidak ada distribusi, default aktif
+              if (!sw.dataset.touched) {
+                sw.checked = true;
+              }
+            } else {
+              sw.disabled = true;
+            }
+          }
+
+          refreshMasterState();
+        });
+      });
+
+      // Tandai switch jika user pernah klik (supaya tidak diubah otomatis lagi)
+      document.querySelectorAll('.dep-active-switch').forEach(sw => {
+        sw.addEventListener('change', function() {
+          sw.dataset.touched = '1';
+        });
       });
 
       // Inisialisasi awal

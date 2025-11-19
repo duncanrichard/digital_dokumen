@@ -24,15 +24,18 @@ use App\Http\Controllers\Settings\WatermarkController;
 // Auth pages
 use App\Http\Controllers\authentications\LoginBasic;
 
+// System Framework
+use App\Http\Controllers\System\FrameworkController;
+
 /*
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
 |
 | Catatan:
-| - Halaman login dijadikan root ('/'), hanya bisa diakses guest.
-| - Semua halaman aplikasi (dashboard, master, documents, access, settings) butuh auth.
-| - Logout dilakukan via POST ke /logout.
+| - Halaman login dijadikan root ('/') dan hanya bisa diakses guest.
+| - Semua halaman aplikasi (dashboard, master, documents, access, settings) wajib auth.
+| - Logout via POST ke /logout.
 |
 */
 
@@ -40,33 +43,41 @@ use App\Http\Controllers\authentications\LoginBasic;
 $DOC_ID_REGEX = '([0-9a-fA-F-]{36}|[0-9A-HJKMNP-TV-Z]{26}|\d+)';
 $UUID_REGEX   = '[0-9a-fA-F-]{36}';
 
-/**
- * ================= AUTH (guest) =================
- * - Halaman login jadi halaman utama
- * - Tamu saja yang boleh akses halaman login
- */
+/*
+|--------------------------------------------------------------------------
+| AUTH (guest)
+|--------------------------------------------------------------------------
+*/
 Route::middleware('guest')->group(function () {
-    // root -> login
+    // root → login
     Route::get('/', [LoginBasic::class, 'index'])->name('login');
 
-    // (opsional) akses langsung /login juga ke halaman yang sama
+    // Duplicate route (opsional)
     Route::get('/login', [LoginBasic::class, 'index'])->name('login.page');
 
-    // proses login (POST)
+    // proses login
     Route::post('/login', [LoginBasic::class, 'authenticate'])->name('login.perform');
 });
 
-/**
- * ================= AUTH (authenticated) =================
- * - Semua halaman aplikasi diproteksi auth
- * - Termasuk Dashboard, Master, Documents, Access, Settings
- */
+/*
+|--------------------------------------------------------------------------
+| AUTH (authenticated)
+|--------------------------------------------------------------------------
+*/
 Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
 
-    // ================= DASHBOARD =================
+    /*
+    |--------------------------------------------------------------------------
+    | DASHBOARD
+    |--------------------------------------------------------------------------
+    */
     Route::get('/dashboard', [Analytics::class, 'index'])->name('dashboard-analytics');
 
-    // ================= MASTER DATA =================
+    /*
+    |--------------------------------------------------------------------------
+    | MASTER DATA
+    |--------------------------------------------------------------------------
+    */
     Route::prefix('master')->name('master.')->group(function () {
         // Jenis Dokumen
         Route::get('/jenis-dokumen',  [JenisDokumenController::class, 'index'])->name('jenis-dokumen.index');
@@ -81,36 +92,42 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
         Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])->name('departments.destroy');
     });
 
-    // ================= NOTIFICATIONS (global) =================
+    /*
+    |--------------------------------------------------------------------------
+    | NOTIFICATIONS
+    |--------------------------------------------------------------------------
+    */
     Route::post('/notifications/read-all', [DocumentUploadController::class, 'markAllNotificationsRead'])
         ->name('notifications.readAll');
 
-    // ================= DOCUMENTS =================
+    /*
+    |--------------------------------------------------------------------------
+    | DOCUMENTS
+    |--------------------------------------------------------------------------
+    */
     Route::prefix('documents')->name('documents.')->group(function () use ($DOC_ID_REGEX) {
-        // Library & upload
-        // Note: route name 'documents.index' dipakai di navbar untuk "View all documents"
+
+        // Library & Upload
         Route::get('/upload',  [DocumentUploadController::class, 'index'])->name('index');
         Route::post('/upload', [DocumentUploadController::class, 'store'])->name('store');
 
-        // Open PDF + mark as read (buka di tab baru)
+        // Open PDF
         Route::get('/{document}/open', [DocumentUploadController::class, 'open'])
             ->where('document', $DOC_ID_REGEX)->name('open');
 
-        // Stream raw PDF (untuk PDF.js/iframe)
+        // PDF Stream
         Route::get('/{document}/file', [DocumentUploadController::class, 'stream'])
             ->where('document', $DOC_ID_REGEX)->name('file');
 
-        // (Opsional) Download—jika kamu ingin pisahkan dari stream
-        // Route::get('/{document}/download', [DocumentUploadController::class, 'download'])
-        //     ->where('document', $DOC_ID_REGEX)->name('download');
-
-        // Edit/Update/Delete
+        // Edit
         Route::get('/{document}/edit', [DocumentUploadController::class, 'edit'])
             ->where('document', $DOC_ID_REGEX)->name('edit');
 
+        // Update
         Route::put('/{document}', [DocumentUploadController::class, 'update'])
             ->where('document', $DOC_ID_REGEX)->name('update');
 
+        // Delete
         Route::delete('/{document}', [DocumentUploadController::class, 'destroy'])
             ->where('document', $DOC_ID_REGEX)->name('destroy');
 
@@ -125,7 +142,11 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
         Route::post('/revisions', [DocumentRevisionController::class, 'store'])->name('revisions.store');
     });
 
-    // ================= USER ACCESS =================
+    /*
+    |--------------------------------------------------------------------------
+    | USER ACCESS
+    |--------------------------------------------------------------------------
+    */
     Route::prefix('access')->name('access.')->group(function () use ($UUID_REGEX) {
         Route::prefix('users')->name('users.')->group(function () use ($UUID_REGEX) {
             Route::get('/',          [UserController::class, 'index'])->name('index');
@@ -135,14 +156,29 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
         });
     });
 
-    // ================= SETTINGS =================
-    Route::prefix('settings')->group(function () {
-        // Watermark/DRM
-        Route::get('/watermark',  [WatermarkController::class, 'index'])->name('settings-watermark');
-        Route::post('/watermark', [WatermarkController::class, 'update'])->name('settings-watermark.update');
+    /*
+    |--------------------------------------------------------------------------
+    | SETTINGS
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('settings')->name('settings.')->group(function () {
+        Route::get('/watermark',  [WatermarkController::class, 'index'])->name('watermark');
+        Route::post('/watermark', [WatermarkController::class, 'update'])->name('watermark.update');
     });
 
-    // ================= LOGOUT =================
-    // Logout via POST, akan diarahkan kembali ke route('login') oleh controller
+    /*
+    |--------------------------------------------------------------------------
+    | SYSTEM FRAMEWORK
+    |--------------------------------------------------------------------------
+    */
+    Route::prefix('system')->name('system.')->group(function () {
+        Route::get('/framework', [FrameworkController::class, 'index'])->name('framework');
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | LOGOUT
+    |--------------------------------------------------------------------------
+    */
     Route::post('/logout', [LoginBasic::class, 'logout'])->name('logout');
 });

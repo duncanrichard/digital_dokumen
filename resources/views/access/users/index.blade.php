@@ -82,7 +82,7 @@
             </div>
             <div class="col-12 col-md-4">
               <label class="form-label small text-muted mb-1">Search</label>
-              <input type="text" name="q" value="{{ $q ?? '' }}" class="form-control" placeholder="Search by name or username...">
+              <input type="text" name="q" value="{{ $q ?? '' }}" class="form-control" placeholder="Search by name, username or email...">
             </div>
             <div class="col-12 col-md-2 d-flex gap-2">
               <button type="submit" class="btn btn-primary flex-fill">
@@ -106,6 +106,7 @@
                 <th class="col-idx">#</th>
                 <th>Name</th>
                 <th>Username</th>
+                <th>Email</th>
                 <th>Department</th>
                 <th class="text-center">Status</th>
                 <th class="col-aksi">Actions</th>
@@ -120,6 +121,9 @@
                   </td>
                   <td>
                     <div class="text-muted">{{ $row->username }}</div>
+                  </td>
+                  <td>
+                    <div class="text-muted">{{ $row->email }}</div>
                   </td>
                   <td>
                     @if($row->department)
@@ -149,6 +153,7 @@
                               data-id="{{ $row->id }}"
                               data-name="{{ $row->name }}"
                               data-username="{{ $row->username }}"
+                              data-email="{{ $row->email }}"
                               data-department_id="{{ $row->department_id }}"
                               data-is_active="{{ $row->is_active ? 1 : 0 }}">
                         <i class="mdi mdi-pencil-outline"></i>
@@ -163,7 +168,7 @@
                 </tr>
               @empty
                 <tr>
-                  <td colspan="6">
+                  <td colspan="7">
                     <div class="empty-state py-5 text-center">
                       <i class="mdi mdi-account-search-outline fs-1 text-muted"></i>
                       <h5 class="text-muted mt-3">No Users Found</h5>
@@ -232,6 +237,17 @@
                      placeholder="e.g. johndoe" required>
               @error('username') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
             </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label required">Email</label>
+              <input type="email" class="form-control @error('email') is-invalid @enderror"
+                     name="email" id="create_email"
+                     value="{{ old('_from')==='create' ? old('email') : '' }}"
+                     placeholder="e.g. john@example.com" required>
+              @error('email') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+          </div>
+
+          <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Department</label>
               <select class="form-select select2 @error('department_id') is-invalid @enderror"
@@ -325,6 +341,16 @@
               @error('username') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
             </div>
             <div class="col-md-6 mb-3">
+              <label class="form-label required">Email</label>
+              <input type="email" class="form-control @error('email') is-invalid @enderror"
+                     name="email" id="edit_email"
+                     value="{{ old('_from')==='edit' ? old('email') : '' }}" required>
+              @error('email') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
               <label class="form-label">Department</label>
               <select class="form-select select2 @error('department_id') is-invalid @enderror"
                       name="department_id" id="edit_department_id"
@@ -401,7 +427,6 @@
           theme: 'bootstrap-5',
           width: $el.data('width') ? $el.data('width') : '100%',
           placeholder: $el.data('placeholder') || '',
-          allowClear: true,
           // Penting: Tentukan dropdown parent agar Select2 berfungsi di dalam modal
           dropdownParent: $el.closest('.modal').length ? $el.closest('.modal') : $el.closest('form')
         });
@@ -450,6 +475,7 @@
         setVal('edit_id', btn.data('id'));
         setVal('edit_name', btn.data('name'));
         setVal('edit_username', btn.data('username'));
+        setVal('edit_email', btn.data('email'));
 
         // Set Select2
         $('#edit_department_id').val(btn.data('department_id') || '').trigger('change');
@@ -470,7 +496,7 @@
       $(document).on('click', '.btn-delete-user', function(e) {
         e.preventDefault();
         if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
-        
+
         const form = document.getElementById('formDeleteUser');
         form.action = $(this).data('delete-url') || '#';
         form.submit();

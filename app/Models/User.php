@@ -42,6 +42,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'username',
+        'email',
         'password',
         'department_id',
         'is_active',
@@ -86,7 +87,8 @@ class User extends Authenticatable
         $term = mb_strtolower($term);
         return $query->where(function ($q) use ($term) {
             $q->whereRaw('LOWER(name) LIKE ?', ["%{$term}%"])
-              ->orWhereRaw('LOWER(username) LIKE ?', ["%{$term}%"]);
+              ->orWhereRaw('LOWER(username) LIKE ?', ["%{$term}%"])
+              ->orWhereRaw('LOWER(email) LIKE ?', ["%{$term}%"]);
         });
     }
 
