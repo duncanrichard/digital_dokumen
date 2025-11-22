@@ -4,16 +4,28 @@
 /vendor/
 /node_modules/
 
+<<<<<<< HEAD
 # Laravel storage (kecuali file yang memang mau disimpan via .gitignore bawaan)
+=======
+# Laravel storage (kecuali public)
+storage/*.key
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 /storage/*.key
 /storage/logs
 /storage/framework
 /storage/app/public
 
+<<<<<<< HEAD
 # Public build artefacts (Vite / Laravel Mix)
 public/storage
 public/build
 public/hot
+=======
+# Public build artefacts
+/public/storage
+/public/build
+/public/hot
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
 # Composer & PHPUnit
 .phpunit.result.cache
@@ -38,9 +50,12 @@ public/hot
 npm-debug.log
 node-debug.log
 yarn-error.log
+<<<<<<< HEAD
 
 # (Opsional – biasanya LEBIH BAIK dikomit, 
 # tapi kalau kamu memang mau abaikan lockfile, biarkan ini)
+=======
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 yarn.lock
 package-lock.json
 package-lock.log
@@ -56,6 +71,7 @@ Homestead.yaml
 # PUBLIC ASSETS BUILD RESULT
 # (Hanya simpan folder assets asli)
 # ==========================================
+<<<<<<< HEAD
 
 # Kalau kamu TIDAK menyimpan file CSS/JS asli di sini,
 # biarkan ter-ignore (misalnya semua hasil build)
@@ -64,6 +80,10 @@ Homestead.yaml
 
 # Simpan hanya file-file langsung di /public/assets,
 # tapi abaikan subfolder hasil build
+=======
+/public/css
+/public/js
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 !/public/assets/*
 /public/assets/js
 /public/assets/css

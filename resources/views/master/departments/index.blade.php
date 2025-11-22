@@ -1,6 +1,10 @@
 @extends('layouts/contentNavbarLayout')
 
+<<<<<<< HEAD
 @section('title', 'Master Data - Divisi')
+=======
+@section('title', 'Master Data - Departments')
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
 @section('content')
 <div class="row gy-4">
@@ -23,8 +27,13 @@
     <div class="card">
       <div class="card-header d-flex flex-wrap align-items-center justify-content-between">
         <div>
+<<<<<<< HEAD
           <h5 class="card-title mb-1">Divisi</h5>
           <small class="text-muted">Kelola data divisi</small>
+=======
+          <h5 class="card-title mb-1">Departments</h5>
+          <small class="text-muted">Manage your departments</small>
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         </div>
 
         <div class="d-flex gap-2">
@@ -32,7 +41,11 @@
             <input type="text" name="q" value="{{ $q }}" class="form-control" placeholder="Search code/name..." />
           </form>
           <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
+<<<<<<< HEAD
             <i class="mdi mdi-plus"></i> Add Divisi
+=======
+            <i class="mdi mdi-plus"></i> Add
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
           </button>
         </div>
       </div>
@@ -82,7 +95,11 @@
                       @method('PUT')
 
                       <div class="modal-header border-0">
+<<<<<<< HEAD
                         <h5 class="modal-title fw-semibold" id="editModalLabel-{{ $row->id }}">Edit Divisi</h5>
+=======
+                        <h5 class="modal-title fw-semibold" id="editModalLabel-{{ $row->id }}">Edit Department</h5>
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                         <button type="button" class="btn btn-icon btn-text-secondary" data-bs-dismiss="modal" aria-label="Close">
                           <i class="mdi mdi-close"></i>
                         </button>
@@ -121,7 +138,11 @@
                         <button type="submit"
                                 class="btn btn-outline-danger d-inline-flex align-items-center gap-2"
                                 form="deleteForm-{{ $row->id }}"
+<<<<<<< HEAD
                                 onclick="return confirm('Delete this division?')">
+=======
+                                onclick="return confirm('Delete this department?')">
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                           <i class="mdi mdi-delete-outline"></i> Delete
                         </button>
 
@@ -169,7 +190,11 @@
       <form method="post" action="{{ route('master.departments.store') }}">
         @csrf
         <div class="modal-header border-0">
+<<<<<<< HEAD
           <h5 class="modal-title fw-semibold" id="createModalLabel">Add Divisi</h5>
+=======
+          <h5 class="modal-title fw-semibold" id="createModalLabel">Add Department</h5>
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
           <button type="button" class="btn btn-icon btn-text-secondary" data-bs-dismiss="modal" aria-label="Close">
             <i class="mdi mdi-close"></i>
           </button>

@@ -8,8 +8,11 @@ use App\Models\JenisDokumen;
 use App\Models\Department;
 use App\Models\Document;
 use App\Models\WatermarkSetting;
+<<<<<<< HEAD
 use App\Models\DocumentAccessRequest;
 use App\Models\DocumentAccessSetting;
+=======
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -29,7 +32,11 @@ class DocumentUploadController extends Controller
         // Ambil dept user login (boleh null untuk admin)
         $me         = $request->user();
         $myDeptId   = $me?->department_id;      // uuid | null
+<<<<<<< HEAD
         $lockDeptId = $myDeptId;                // jika ada, kita kunci akses dokumen hanya utk divisi ini
+=======
+        $lockDeptId = $myDeptId;                // jika ada, kita kunci filter departemen
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
         // Dropdown Document Types (selalu tersedia)
         $documentTypes = JenisDokumen::where('is_active', true)
@@ -39,6 +46,7 @@ class DocumentUploadController extends Controller
         // Dropdown Departments:
         // - Jika user punya dept → hanya dept itu yang tampil
         // - Jika tidak punya dept → tampil semua dept aktif
+<<<<<<< HEAD
         $departments = Department::when($lockDeptId, fn($q2) => $q2->where('id', $lockDeptId))
             ->when(!$lockDeptId, fn($q3) => $q3->where('is_active', true))
             ->orderBy('name')
@@ -49,6 +57,17 @@ class DocumentUploadController extends Controller
         // Kalau dipaksa, filter "department_id = divisi user" akan membunuh dokumen
         // yang hanya datang dari distribusi (document_distributions).
         // Jadi, $filterDeptId sekarang murni dari request user saja.
+=======
+        $departments = Department::when($lockDeptId, fn($q) => $q->where('id', $lockDeptId))
+            ->when(!$lockDeptId, fn($q) => $q->where('is_active', true))
+            ->orderBy('name')
+            ->get(['id','code','name']);
+
+        // Jika user punya dept & tidak memilih department_id di filter, set default ke dept user
+        if ($lockDeptId && empty($filterDeptId)) {
+            $filterDeptId = $lockDeptId;
+        }
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
         $items = Document::with([
                 'jenisDokumen:id,kode,nama',
@@ -71,6 +90,7 @@ class DocumentUploadController extends Controller
                         });
                 });
             })
+<<<<<<< HEAD
             // Filter jenis dokumen dari form
             ->when($filterJenisId, fn($q2) => $q2->where('jenis_dokumen_id', $filterJenisId))
 
@@ -91,6 +111,15 @@ class DocumentUploadController extends Controller
             //  - dokumen dari divisi lain tapi didistribusikan ke divisinya.
             ->when($lockDeptId, function ($q4) use ($lockDeptId) {
                 $q4->where(function ($sub) use ($lockDeptId) {
+=======
+            // Filter dari form
+            ->when($filterJenisId, fn($q2) => $q2->where('jenis_dokumen_id', $filterJenisId))
+            ->when($filterDeptId,  fn($q3) => $q3->where('department_id',    $filterDeptId))
+
+            // PEMBATASAN BERDASARKAN DEPT USER YANG LOGIN
+            ->when($lockDeptId, function ($q) use ($lockDeptId) {
+                $q->where(function ($sub) use ($lockDeptId) {
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                     $sub->where('department_id', $lockDeptId)
                         ->orWhereHas('distributedDepartments', function ($qq) use ($lockDeptId) {
                             $qq->where('departments.id', $lockDeptId);
@@ -323,7 +352,11 @@ class DocumentUploadController extends Controller
     }
 
     /**
+<<<<<<< HEAD
      * OPEN: tandai notifikasi dibaca, lalu redirect ke gate stream()
+=======
+     * OPEN: tandai notifikasi dibaca, lalu redirect ke stream (agar tampil watermark)
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
      */
     public function open(Document $document)
     {
@@ -335,6 +368,10 @@ class DocumentUploadController extends Controller
             abort(404, 'File not found.');
         }
 
+<<<<<<< HEAD
+=======
+        // Redirect ke stream agar menggunakan watermark
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         return redirect()->route('documents.file', $document->id);
     }
 
@@ -344,13 +381,18 @@ class DocumentUploadController extends Controller
         return back()->with('success', 'All notifications marked as read.');
     }
 
+<<<<<<< HEAD
     // ================== GATE: CEK AKSES, TENTUKAN BUKA TAB BARU / PENDING ==================
+=======
+    // ================== STREAM (WITH WATERMARK) ==================
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     public function stream(Document $document)
     {
         if (!$document->file_path || !Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'File not found.');
         }
 
+<<<<<<< HEAD
         // Di gate: kalau tidak punya akses → SEKALIGUS buat request pending
         $check = $this->checkDocumentAccess($document, true);
 
@@ -390,22 +432,37 @@ class DocumentUploadController extends Controller
 
         $absolutePath = Storage::disk('public')->path($document->file_path);
         $setting      = WatermarkSetting::first();
+=======
+        $absolutePath = Storage::disk('public')->path($document->file_path);
+        $setting = WatermarkSetting::first();
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         $useWatermark = $setting && $setting->enabled;
 
         // Jika tidak ada watermark, file-kan langsung
         if (!$useWatermark) {
+<<<<<<< HEAD
             $filename    = basename($absolutePath);
             $disposition = $asDownload ? 'attachment' : 'inline';
 
             return response()->file($absolutePath, [
                 'Content-Type'        => 'application/pdf',
                 'Content-Disposition' => $disposition.'; filename="'.$filename.'"',
+=======
+            $filename = basename($absolutePath);
+            return response()->file($absolutePath, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="'.$filename.'"',
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                 'X-Accel-Buffering'   => 'no',
             ]);
         }
 
         // Render watermark on-the-fly
+<<<<<<< HEAD
         $pdf       = new Fpdi();
+=======
+        $pdf = new Fpdi();
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         $pageCount = $pdf->setSourceFile($absolutePath);
 
         for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
@@ -423,6 +480,7 @@ class DocumentUploadController extends Controller
         }
 
         $downloadName = basename($absolutePath);
+<<<<<<< HEAD
         $dest         = $asDownload ? 'D' : 'I'; // D = attachment, I = inline
 
         return new StreamedResponse(function () use ($pdf, $downloadName, $dest) {
@@ -542,6 +600,19 @@ class DocumentUploadController extends Controller
     }
 
     /** ---------- Helpers watermark ---------- */
+=======
+
+        return new StreamedResponse(function() use ($pdf, $downloadName) {
+            // Inline (I) agar tampil di tab
+            $pdf->Output('I', $downloadName);
+        }, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.$downloadName.'"',
+        ]);
+    }
+
+    /** ---------- Helpers ---------- */
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
     protected function parseTemplateVars(string $tpl, ?Document $doc = null): string
     {
@@ -572,11 +643,19 @@ class DocumentUploadController extends Controller
         $pdf->SetFont('Helvetica', 'B', (int) ($s->font_size ?? 28));
         $pdf->SetTextColor($r, $g, $b);
 
+<<<<<<< HEAD
+=======
+        // Rotasi: gunakan jika tersedia (FPDI tertentu punya StartTransform/Rotate)
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         $this->rotateStart($pdf, (float) ($s->rotation ?? 45), $w/2, $h/2);
 
         if ($s->repeat) {
             $step = max(200, (int) ($s->font_size * 6));
+<<<<<<< HEAD
             for ($y = -$h * 1; $y <= $h * 2; $y += $step) {
+=======
+            for ($y = -$h; $y <= $h*2; $y += $step) {
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                 $pdf->Text($w/2 - $pdf->GetStringWidth($text)/2, $y, $text);
             }
         } else {
@@ -594,6 +673,7 @@ class DocumentUploadController extends Controller
 
     protected function applyImageWatermark(Fpdi $pdf, WatermarkSetting $s, $w, $h)
     {
+<<<<<<< HEAD
         $path = public_path($s->image_path);
         if (!file_exists($path)) {
             return;
@@ -601,12 +681,24 @@ class DocumentUploadController extends Controller
 
         $imgW = $w * 0.5;
         $imgH = 0;
+=======
+        $path = public_path($s->image_path); // karena kita simpan 'storage/...'
+        if (!file_exists($path)) return;
+
+        $imgW = $w * 0.5; // skala 50% lebar halaman
+        $imgH = 0;        // biar auto-scale
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
         $this->rotateStart($pdf, (float) ($s->rotation ?? 45), $w/2, $h/2);
 
         if ($s->repeat) {
+<<<<<<< HEAD
             $step = max(300, (int) ($w * 0.7));
             for ($y = -$h; $y <= $h * 2; $y += $step) {
+=======
+            $step = max(300, (int)($w*0.7));
+            for ($y = -$h; $y <= $h*2; $y += $step) {
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                 $pdf->Image($path, $w/2 - $imgW/2, $y, $imgW, $imgH);
             }
         } else {
@@ -619,6 +711,7 @@ class DocumentUploadController extends Controller
 
     protected function hexToRgb($hex): array
     {
+<<<<<<< HEAD
         $hex = str_replace('#', '', $hex);
         if (strlen($hex) === 8) {
             $hex = substr($hex, 0, 6); // abaikan alpha
@@ -631,6 +724,12 @@ class DocumentUploadController extends Controller
             hexdec(substr($hex, 2, 2)),
             hexdec(substr($hex, 4, 2))
         ];
+=======
+        $hex = str_replace('#','',$hex);
+        if (strlen($hex) === 8) $hex = substr($hex,0,6); // abaikan alpha
+        if (strlen($hex) !== 6) return [160,160,160];
+        return [hexdec(substr($hex,0,2)), hexdec(substr($hex,2,2)), hexdec(substr($hex,4,2))];
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     }
 
     protected function calcPosition(string $pos, float $w, float $h, float $textW, float $fontSize): array
@@ -642,13 +741,18 @@ class DocumentUploadController extends Controller
             case 'bottom-left':  return [$margin, $h - $margin];
             case 'bottom-right': return [$w - $textW - $margin, $h - $margin];
             case 'center':
+<<<<<<< HEAD
             default:             return [($w - $textW) / 2, $h / 2];
+=======
+            default:             return [($w - $textW)/2, $h/2];
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         }
     }
 
     protected function calcPositionImage(string $pos, float $w, float $h, float $imgW, float $imgH): array
     {
         $margin = 20;
+<<<<<<< HEAD
         $x = $margin;
         $y = $margin;
 
@@ -679,12 +783,33 @@ class DocumentUploadController extends Controller
         return [$x, $y];
     }
 
+=======
+        $x = $margin; $y = $margin;
+        switch ($pos) {
+            case 'top-left':     $x=$margin;               $y=$margin; break;
+            case 'top-right':    $x=$w-$imgW-$margin;      $y=$margin; break;
+            case 'bottom-left':  $x=$margin;               $y=$h-$imgH-$margin; break;
+            case 'bottom-right': $x=$w-$imgW-$margin;      $y=$h-$imgH-$margin; break;
+            case 'center':
+            default:             $x=($w-$imgW)/2;          $y=($h-$imgH)/2; break;
+        }
+        return [$x, $y];
+    }
+
+    /**
+     * Wrapper rotasi agar aman jika metode tidak tersedia pada FPDF/FPDI yang terpasang
+     */
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     protected function rotateStart(Fpdi $pdf, float $angle, float $cx, float $cy): void
     {
         if (method_exists($pdf, 'StartTransform') && method_exists($pdf, 'Rotate')) {
             $pdf->StartTransform();
             $pdf->Rotate($angle, $cx, $cy);
         }
+<<<<<<< HEAD
+=======
+        // jika tidak ada, biarkan tanpa rotasi (fallback)
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     }
 
     protected function rotateStop(Fpdi $pdf): void

@@ -14,6 +14,7 @@ use App\Http\Controllers\Master\DepartmentController;
 use App\Http\Controllers\Documents\DocumentUploadController;
 use App\Http\Controllers\Documents\DocumentDistributionController;
 use App\Http\Controllers\Documents\DocumentRevisionController;
+<<<<<<< HEAD
 use App\Http\Controllers\Documents\DocumentAccessApprovalController;
 
 // User Access
@@ -23,6 +24,14 @@ use App\Http\Controllers\Access\RoleController;
 // Settings
 use App\Http\Controllers\Settings\WatermarkController;
 use App\Http\Controllers\Settings\DocumentAccessSettingController;
+=======
+
+// User Access
+use App\Http\Controllers\Access\UserController;
+
+// Settings
+use App\Http\Controllers\Settings\WatermarkController;
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
 // Auth pages
 use App\Http\Controllers\authentications\LoginBasic;
@@ -35,8 +44,15 @@ use App\Http\Controllers\System\FrameworkController;
 | Web Routes
 |--------------------------------------------------------------------------
 |
+<<<<<<< HEAD
 | - Halaman login dijadikan root ('/') dan hanya bisa diakses guest.
 | - Semua halaman aplikasi wajib auth.
+=======
+| Catatan:
+| - Halaman login dijadikan root ('/') dan hanya bisa diakses guest.
+| - Semua halaman aplikasi (dashboard, master, documents, access, settings) wajib auth.
+| - Logout via POST ke /logout.
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 |
 */
 
@@ -53,7 +69,14 @@ Route::middleware('guest')->group(function () {
     // root → login
     Route::get('/', [LoginBasic::class, 'index'])->name('login');
 
+<<<<<<< HEAD
     Route::get('/login', [LoginBasic::class, 'index'])->name('login.page');
+=======
+    // Duplicate route (opsional)
+    Route::get('/login', [LoginBasic::class, 'index'])->name('login.page');
+
+    // proses login
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     Route::post('/login', [LoginBasic::class, 'authenticate'])->name('login.perform');
 });
 
@@ -95,22 +118,32 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
     | NOTIFICATIONS
     |--------------------------------------------------------------------------
     */
+<<<<<<< HEAD
     Route::post(
         '/notifications/read-all',
         [DocumentUploadController::class, 'markAllNotificationsRead']
     )->name('notifications.readAll');
+=======
+    Route::post('/notifications/read-all', [DocumentUploadController::class, 'markAllNotificationsRead'])
+        ->name('notifications.readAll');
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
     /*
     |--------------------------------------------------------------------------
     | DOCUMENTS
     |--------------------------------------------------------------------------
     */
+<<<<<<< HEAD
     Route::prefix('documents')->name('documents.')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
+=======
+    Route::prefix('documents')->name('documents.')->group(function () use ($DOC_ID_REGEX) {
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
         // Library & Upload
         Route::get('/upload',  [DocumentUploadController::class, 'index'])->name('index');
         Route::post('/upload', [DocumentUploadController::class, 'store'])->name('store');
 
+<<<<<<< HEAD
         // Open PDF (tandai notifikasi, lalu redirect ke gate stream)
         Route::get('/{document}/open', [DocumentUploadController::class, 'open'])
             ->where('document', $DOC_ID_REGEX)
@@ -142,6 +175,27 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
         Route::delete('/{document}', [DocumentUploadController::class, 'destroy'])
             ->where('document', $DOC_ID_REGEX)
             ->name('destroy');
+=======
+        // Open PDF
+        Route::get('/{document}/open', [DocumentUploadController::class, 'open'])
+            ->where('document', $DOC_ID_REGEX)->name('open');
+
+        // PDF Stream
+        Route::get('/{document}/file', [DocumentUploadController::class, 'stream'])
+            ->where('document', $DOC_ID_REGEX)->name('file');
+
+        // Edit
+        Route::get('/{document}/edit', [DocumentUploadController::class, 'edit'])
+            ->where('document', $DOC_ID_REGEX)->name('edit');
+
+        // Update
+        Route::put('/{document}', [DocumentUploadController::class, 'update'])
+            ->where('document', $DOC_ID_REGEX)->name('update');
+
+        // Delete
+        Route::delete('/{document}', [DocumentUploadController::class, 'destroy'])
+            ->where('document', $DOC_ID_REGEX)->name('destroy');
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
         // Distribution
         Route::prefix('distribution')->name('distribution.')->group(function () {
@@ -152,6 +206,7 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
         // Revisions
         Route::get('/revisions',  [DocumentRevisionController::class, 'index'])->name('revisions.index');
         Route::post('/revisions', [DocumentRevisionController::class, 'store'])->name('revisions.store');
+<<<<<<< HEAD
 
         /*
         |--------------------------------------------------------------------------
@@ -176,6 +231,8 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
                 ->name('reject');
             // → documents.approvals.reject
         });
+=======
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     });
 
     /*
@@ -184,6 +241,7 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
     |--------------------------------------------------------------------------
     */
     Route::prefix('access')->name('access.')->group(function () use ($UUID_REGEX) {
+<<<<<<< HEAD
 
         // Users
         Route::prefix('users')->name('users.')->group(function () use ($UUID_REGEX) {
@@ -203,6 +261,13 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
                 ->where('role', $UUID_REGEX)->name('update');
             Route::delete('/{role}', [RoleController::class, 'destroy'])
                 ->where('role', $UUID_REGEX)->name('destroy');
+=======
+        Route::prefix('users')->name('users.')->group(function () use ($UUID_REGEX) {
+            Route::get('/',          [UserController::class, 'index'])->name('index');
+            Route::post('/',         [UserController::class, 'store'])->name('store');
+            Route::put('/{user}',    [UserController::class, 'update'])->where('user', $UUID_REGEX)->name('update');
+            Route::delete('/{user}', [UserController::class, 'destroy'])->where('user', $UUID_REGEX)->name('destroy');
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         });
     });
 
@@ -212,6 +277,7 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
     |--------------------------------------------------------------------------
     */
     Route::prefix('settings')->name('settings.')->group(function () {
+<<<<<<< HEAD
         // Watermark
         Route::get('/watermark',  [WatermarkController::class, 'index'])->name('watermark');
         Route::post('/watermark', [WatermarkController::class, 'update'])->name('watermark.update');
@@ -222,6 +288,10 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
 
         Route::post('/document-access', [DocumentAccessSettingController::class, 'update'])
             ->name('document-access.update');
+=======
+        Route::get('/watermark',  [WatermarkController::class, 'index'])->name('watermark');
+        Route::post('/watermark', [WatermarkController::class, 'update'])->name('watermark.update');
+>>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     });
 
     /*
