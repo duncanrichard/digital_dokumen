@@ -50,12 +50,9 @@ public/hot
 npm-debug.log
 node-debug.log
 yarn-error.log
-<<<<<<< HEAD
 
 # (Opsional – biasanya LEBIH BAIK dikomit, 
 # tapi kalau kamu memang mau abaikan lockfile, biarkan ini)
-=======
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 yarn.lock
 package-lock.json
 package-lock.log
