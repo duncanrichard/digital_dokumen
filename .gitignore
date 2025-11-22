@@ -1,90 +1,19 @@
-# ==========================================
-# LARAVEL DEFAULT DIRECTORIES
-# ==========================================
-/vendor/
-/node_modules/
-
-<<<<<<< HEAD
-# Laravel storage (kecuali file yang memang mau disimpan via .gitignore bawaan)
-=======
-# Laravel storage (kecuali public)
-storage/*.key
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
-/storage/*.key
-/storage/logs
-/storage/framework
-/storage/app/public
-
-<<<<<<< HEAD
-# Public build artefacts (Vite / Laravel Mix)
-public/storage
-public/build
-public/hot
-=======
-# Public build artefacts
-/public/storage
-/public/build
+/node_modules
 /public/hot
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
-
-# Composer & PHPUnit
-.phpunit.result.cache
-/.phpunit.cache
-
-# Laravel mix & vite
-/public/mix-manifest.json
-
-# ==========================================
-# ENVIRONMENT FILES (SANGAT PENTING)
-# ==========================================
+/public/storage
+/storage/*.key
+/vendor
 .env
 .env.*
-.env.backup
-.env.production
-
-# ==========================================
-# IGNORE DEVELOPMENT FILES
-# ==========================================
+/.env.backup
+.phpunit.result.cache
+Homestead.yaml
+Homestead.json
+/.vagrant
+npm-debug.log
+yarn-error.log
 /.idea
 /.vscode
-npm-debug.log
-node-debug.log
-yarn-error.log
-
-# (Opsional – biasanya LEBIH BAIK dikomit, 
-# tapi kalau kamu memang mau abaikan lockfile, biarkan ini)
-yarn.lock
-package-lock.json
-package-lock.log
-
-# ==========================================
-# DOCKER & HOMESTEAD
-# ==========================================
-docker-compose.override.yml
-Homestead.json
-Homestead.yaml
-
-# ==========================================
-# PUBLIC ASSETS BUILD RESULT
-# (Hanya simpan folder assets asli)
-# ==========================================
-<<<<<<< HEAD
-
-# Kalau kamu TIDAK menyimpan file CSS/JS asli di sini,
-# biarkan ter-ignore (misalnya semua hasil build)
-/public/css
-/public/js
-
-# Simpan hanya file-file langsung di /public/assets,
-# tapi abaikan subfolder hasil build
-=======
-/public/css
-/public/js
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
-!/public/assets/*
-/public/assets/js
-/public/assets/css
-/public/assets/vendor
-
-# Keep original static assets
-# public/assets/<your custom files> tetap tersimpan
+.DS_Store
+Thumbs.db
+/public/build
