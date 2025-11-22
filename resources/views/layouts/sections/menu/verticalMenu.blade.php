@@ -3,10 +3,10 @@
   <!-- ! Hide app brand if navbar-full -->
   <div class="app-brand demo">
     <a href="{{url('/')}}" class="app-brand-link">
-      <span class="app-brand-logo demo me-1">
+     <!--  <span class="app-brand-logo demo me-1">
         @include('_partials.macros',["height"=>20])
-      </span>
-      <span class="app-brand-text demo menu-text fw-semibold ms-2">Digital Documen</span>
+      </span> -->
+      <span class="app-brand-text demo menu-text fw-semibold ms-2">Digital Document</span>
     </a>
 
     <a href="javascript:void(0);" class="layout-menu-toggle menu-link text-large ms-auto">

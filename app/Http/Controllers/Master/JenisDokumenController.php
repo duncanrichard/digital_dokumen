@@ -29,10 +29,18 @@ class JenisDokumenController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'kode'      => ['required', 'max:20', 'alpha_dash', 'unique:jenis_dokumen,kode'],
+            // DIGANTI: alpha_dash → regex yang mengizinkan huruf, angka, -, _, dan .
+            'kode'      => [
+                'required',
+                'max:20',
+                'regex:/^[A-Za-z0-9._-]+$/',
+                'unique:jenis_dokumen,kode',
+            ],
             'nama'      => ['required', 'max:100'],
             'deskripsi' => ['nullable', 'max:1000'],
             'is_active' => ['required', 'boolean'],
+        ], [
+            'kode.regex' => 'Kode hanya boleh berisi huruf, angka, titik (.), strip (-), dan garis bawah (_).',
         ]);
 
         JenisDokumen::create($validated);
@@ -45,10 +53,17 @@ class JenisDokumenController extends Controller
     public function update(Request $request, JenisDokumen $jenisDokumen)
     {
         $validated = $request->validate([
-            'kode'      => ['required', 'max:20', 'alpha_dash', 'unique:jenis_dokumen,kode,' . $jenisDokumen->id],
+            'kode'      => [
+                'required',
+                'max:20',
+                'regex:/^[A-Za-z0-9._-]+$/',
+                'unique:jenis_dokumen,kode,' . $jenisDokumen->id,
+            ],
             'nama'      => ['required', 'max:100'],
             'deskripsi' => ['nullable', 'max:1000'],
             'is_active' => ['required', 'boolean'],
+        ], [
+            'kode.regex' => 'Kode hanya boleh berisi huruf, angka, titik (.), strip (-), dan garis bawah (_).',
         ]);
 
         $jenisDokumen->update($validated);

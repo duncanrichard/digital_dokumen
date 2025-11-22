@@ -29,7 +29,13 @@ class DepartmentController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'code'        => ['required', 'max:20', 'alpha_dash', 'unique:departments,code'],
+            'code'        => [
+                'required',
+                'max:20',
+                // izinkan huruf, angka, -, _, koma, titik, slash, dan spasi
+                'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/',
+                'unique:departments,code',
+            ],
             'name'        => ['required', 'max:100'],
             'description' => ['nullable', 'max:1000'],
             'is_active'   => ['required', 'boolean'],
@@ -38,13 +44,19 @@ class DepartmentController extends Controller
         Department::create($validated);
 
         return redirect()->route('master.departments.index')
-            ->with('success', 'Department has been created.');
+            ->with('success', 'Divisi has been created.');
     }
 
     public function update(Request $request, Department $department)
     {
         $validated = $request->validate([
-            'code'        => ['required', 'max:20', 'alpha_dash', 'unique:departments,code,' . $department->id],
+            'code'        => [
+                'required',
+                'max:20',
+                // sama seperti di store()
+                'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/',
+                'unique:departments,code,' . $department->id,
+            ],
             'name'        => ['required', 'max:100'],
             'description' => ['nullable', 'max:1000'],
             'is_active'   => ['required', 'boolean'],
@@ -53,7 +65,7 @@ class DepartmentController extends Controller
         $department->update($validated);
 
         return redirect()->route('master.departments.index')
-            ->with('success', 'Department has been updated.');
+            ->with('success', 'Divisi has been updated.');
     }
 
     public function destroy(Department $department)
@@ -61,6 +73,6 @@ class DepartmentController extends Controller
         $department->delete();
 
         return redirect()->route('master.departments.index')
-            ->with('success', 'Department has been deleted.');
+            ->with('success', 'Divisi has been deleted.');
     }
 }

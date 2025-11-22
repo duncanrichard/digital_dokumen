@@ -3,55 +3,44 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Models\Hris\Employee; // <── MODEL KARYAWAN HRIS (MYSQL)
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Concerns\HasUuids; // Penting untuk ID UUID
-use Illuminate\Support\Facades\Hash; // Untuk hashing password
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasUuids; // Tambahkan HasUuids
+    use HasFactory, Notifiable, HasUuids;
 
     /**
-     * The table associated with the model.
-     *
-     * @var string
+     * Tabel utama (PostgreSQL).
      */
-    protected $table = 'users'; // Sesuaikan dengan nama tabel Anda
+    protected $table = 'users';
 
     /**
-     * Indicates if the IDs are auto-incrementing.
-     *
-     * @var bool
+     * Primary key bertipe UUID (string) dan tidak auto increment.
      */
-    public $incrementing = false; // Karena kita pakai UUID
+    public $incrementing = false;
+    protected $keyType = 'string';
 
     /**
-     * The "type" of the primary key ID.
-     *
-     * @var string
-     */
-    protected $keyType = 'string'; // Karena kita pakai UUID
-
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
+     * Field yang boleh diisi mass-assignment.
      */
     protected $fillable = [
+        'hris_employee_id',   // id karyawan HRIS (tabel employees di mysql_hris)
         'name',
         'username',
         'email',
         'password',
+        'nomor_wa',           // <── nomor WhatsApp
         'department_id',
+        'role_id',
         'is_active',
     ];
 
     /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
+     * Field yang disembunyikan ketika di-serialize.
      */
     protected $hidden = [
         'password',
@@ -59,17 +48,16 @@ class User extends Authenticatable
     ];
 
     /**
-     * The attributes that should be cast.
-     *
-     * @var array<string, string>
+     * Casting field.
      */
     protected $casts = [
         'is_active' => 'boolean',
-        'password' => 'hashed', // Otomatis hash jika di-assign
+        'password'  => 'hashed',
+        // 'hris_employee_id' => 'integer', // boleh diaktifkan kalau id di HRIS integer
     ];
 
     /**
-     * Relasi ke Department.
+     * Relasi ke Department (Postgres).
      */
     public function department()
     {
@@ -77,14 +65,35 @@ class User extends Authenticatable
     }
 
     /**
-     * Scope untuk search.
+     * Relasi ke Role (1 user = 1 role, Postgres).
+     */
+    public function role()
+    {
+        return $this->belongsTo(Role::class, 'role_id');
+    }
+
+    /**
+     * Relasi ke Employee di HRIS (MySQL).
+     * Menggunakan connection "mysql_hris" di model Employee.
+     */
+    public function hrisEmployee()
+    {
+        // foreign key di tabel users = hris_employee_id
+        // primary key di tabel employees = id
+        return $this->belongsTo(Employee::class, 'hris_employee_id');
+    }
+
+    /**
+     * Scope untuk search (nama, username, email di tabel users).
      */
     public function scopeSearch($query, $term)
     {
         if (!$term) {
             return $query;
         }
+
         $term = mb_strtolower($term);
+
         return $query->where(function ($q) use ($term) {
             $q->whereRaw('LOWER(name) LIKE ?', ["%{$term}%"])
               ->orWhereRaw('LOWER(username) LIKE ?', ["%{$term}%"])
@@ -93,13 +102,17 @@ class User extends Authenticatable
     }
 
     /**
-     * Scope untuk status.
+     * Scope untuk filter status aktif / tidak aktif.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  mixed                                  $status '1' | '0' | null
      */
     public function scopeStatus($query, $status)
     {
         if ($status === null || $status === '') {
             return $query;
         }
-        return $query->where('is_active', (bool)$status);
+
+        return $query->where('is_active', (bool) $status);
     }
 }

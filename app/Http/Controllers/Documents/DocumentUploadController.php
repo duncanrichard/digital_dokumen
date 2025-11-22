@@ -8,6 +8,8 @@ use App\Models\JenisDokumen;
 use App\Models\Department;
 use App\Models\Document;
 use App\Models\WatermarkSetting;
+use App\Models\DocumentAccessRequest;
+use App\Models\DocumentAccessSetting;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -27,7 +29,7 @@ class DocumentUploadController extends Controller
         // Ambil dept user login (boleh null untuk admin)
         $me         = $request->user();
         $myDeptId   = $me?->department_id;      // uuid | null
-        $lockDeptId = $myDeptId;                // jika ada, kita kunci filter departemen
+        $lockDeptId = $myDeptId;                // jika ada, kita kunci akses dokumen hanya utk divisi ini
 
         // Dropdown Document Types (selalu tersedia)
         $documentTypes = JenisDokumen::where('is_active', true)
@@ -37,15 +39,16 @@ class DocumentUploadController extends Controller
         // Dropdown Departments:
         // - Jika user punya dept → hanya dept itu yang tampil
         // - Jika tidak punya dept → tampil semua dept aktif
-        $departments = Department::when($lockDeptId, fn($q) => $q->where('id', $lockDeptId))
-            ->when(!$lockDeptId, fn($q) => $q->where('is_active', true))
+        $departments = Department::when($lockDeptId, fn($q2) => $q2->where('id', $lockDeptId))
+            ->when(!$lockDeptId, fn($q3) => $q3->where('is_active', true))
             ->orderBy('name')
             ->get(['id','code','name']);
 
-        // Jika user punya dept & tidak memilih department_id di filter, set default ke dept user
-        if ($lockDeptId && empty($filterDeptId)) {
-            $filterDeptId = $lockDeptId;
-        }
+        // CATATAN PENTING:
+        // Jangan lagi auto-set $filterDeptId = $lockDeptId.
+        // Kalau dipaksa, filter "department_id = divisi user" akan membunuh dokumen
+        // yang hanya datang dari distribusi (document_distributions).
+        // Jadi, $filterDeptId sekarang murni dari request user saja.
 
         $items = Document::with([
                 'jenisDokumen:id,kode,nama',
@@ -68,13 +71,26 @@ class DocumentUploadController extends Controller
                         });
                 });
             })
-            // Filter dari form
+            // Filter jenis dokumen dari form
             ->when($filterJenisId, fn($q2) => $q2->where('jenis_dokumen_id', $filterJenisId))
-            ->when($filterDeptId,  fn($q3) => $q3->where('department_id',    $filterDeptId))
 
-            // PEMBATASAN BERDASARKAN DEPT USER YANG LOGIN
-            ->when($lockDeptId, function ($q) use ($lockDeptId) {
-                $q->where(function ($sub) use ($lockDeptId) {
+            // Filter DIVISI dari form:
+            // artinya: dokumen milik divisi tsb ATAU didistribusikan ke divisi tsb.
+            ->when($filterDeptId, function ($q3) use ($filterDeptId) {
+                $q3->where(function ($sub) use ($filterDeptId) {
+                    $sub->where('department_id', $filterDeptId)
+                        ->orWhereHas('distributedDepartments', function ($qq) use ($filterDeptId) {
+                            $qq->where('departments.id', $filterDeptId);
+                        });
+                });
+            })
+
+            // PEMBATASAN BERDASARKAN DIVISI USER YANG LOGIN (security gate)
+            // User hanya boleh melihat:
+            //  - dokumen milik divisinya sendiri, ATAU
+            //  - dokumen dari divisi lain tapi didistribusikan ke divisinya.
+            ->when($lockDeptId, function ($q4) use ($lockDeptId) {
+                $q4->where(function ($sub) use ($lockDeptId) {
                     $sub->where('department_id', $lockDeptId)
                         ->orWhereHas('distributedDepartments', function ($qq) use ($lockDeptId) {
                             $qq->where('departments.id', $lockDeptId);
@@ -307,7 +323,7 @@ class DocumentUploadController extends Controller
     }
 
     /**
-     * OPEN: tandai notifikasi dibaca, lalu redirect ke stream (agar tampil watermark)
+     * OPEN: tandai notifikasi dibaca, lalu redirect ke gate stream()
      */
     public function open(Document $document)
     {
@@ -319,7 +335,6 @@ class DocumentUploadController extends Controller
             abort(404, 'File not found.');
         }
 
-        // Redirect ke stream agar menggunakan watermark
         return redirect()->route('documents.file', $document->id);
     }
 
@@ -329,29 +344,68 @@ class DocumentUploadController extends Controller
         return back()->with('success', 'All notifications marked as read.');
     }
 
-    // ================== STREAM (WITH WATERMARK) ==================
+    // ================== GATE: CEK AKSES, TENTUKAN BUKA TAB BARU / PENDING ==================
     public function stream(Document $document)
     {
         if (!$document->file_path || !Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'File not found.');
         }
 
+        // Di gate: kalau tidak punya akses → SEKALIGUS buat request pending
+        $check = $this->checkDocumentAccess($document, true);
+
+        // Jika belum di-approve → tampil halaman pending (tidak buka tab baru)
+        if (!$check['allowed'] && $check['pending'] && $check['pendingRequest']) {
+            return view('documents.access-requests.pending', [
+                'document'      => $document,
+                'accessRequest' => $check['pendingRequest'],
+            ]);
+        }
+
+        // Sudah approved → tampil halaman kecil yang akan buka tab baru ke rawFile + tampil timer
+        return view('documents.access-requests.open', [
+            'document'         => $document,
+            'remainingSeconds' => $check['remainingSeconds'], // bisa null kalau setting tidak pakai timer
+        ]);
+    }
+
+    // ================== RAW FILE: DIPANGGIL DARI TAB BARU ==================
+    public function rawFile(Document $document)
+    {
+        if (!$document->file_path || !Storage::disk('public')->exists($document->file_path)) {
+            abort(404, 'File not found.');
+        }
+
+        // Di tab PDF: HANYA cek akses, JANGAN buat request pending baru
+        $check = $this->checkDocumentAccess($document, false);
+
+        if (!$check['allowed']) {
+            // Kalau waktu habis / akses sudah tidak berlaku → balik ke library dengan pesan
+            return redirect()
+                ->route('documents.index')
+                ->with('error', 'Waktu akses dokumen sudah habis. Silakan ajukan permintaan akses lagi jika diperlukan.');
+        }
+
+        $asDownload = request()->boolean('dl', false);
+
         $absolutePath = Storage::disk('public')->path($document->file_path);
-        $setting = WatermarkSetting::first();
+        $setting      = WatermarkSetting::first();
         $useWatermark = $setting && $setting->enabled;
 
         // Jika tidak ada watermark, file-kan langsung
         if (!$useWatermark) {
-            $filename = basename($absolutePath);
+            $filename    = basename($absolutePath);
+            $disposition = $asDownload ? 'attachment' : 'inline';
+
             return response()->file($absolutePath, [
                 'Content-Type'        => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="'.$filename.'"',
+                'Content-Disposition' => $disposition.'; filename="'.$filename.'"',
                 'X-Accel-Buffering'   => 'no',
             ]);
         }
 
         // Render watermark on-the-fly
-        $pdf = new Fpdi();
+        $pdf       = new Fpdi();
         $pageCount = $pdf->setSourceFile($absolutePath);
 
         for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
@@ -369,17 +423,125 @@ class DocumentUploadController extends Controller
         }
 
         $downloadName = basename($absolutePath);
+        $dest         = $asDownload ? 'D' : 'I'; // D = attachment, I = inline
 
-        return new StreamedResponse(function() use ($pdf, $downloadName) {
-            // Inline (I) agar tampil di tab
-            $pdf->Output('I', $downloadName);
+        return new StreamedResponse(function () use ($pdf, $downloadName, $dest) {
+            $pdf->Output($dest, $downloadName);
         }, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="'.$downloadName.'"',
         ]);
     }
 
-    /** ---------- Helpers ---------- */
+    // ================== HELPER: CEK AKSES DOKUMEN ==================
+    /**
+     * @param  \App\Models\Document  $document
+     * @param  bool  $createPending  true = boleh buat request pending baru,
+     *                               false = hanya cek (dipakai di rawFile)
+     * @return array{
+     *   allowed: bool,
+     *   pending: bool,
+     *   remainingSeconds: int|null,
+     *   pendingRequest: \App\Models\DocumentAccessRequest|null
+     * }
+     */
+    protected function checkDocumentAccess(Document $document, bool $createPending = true): array
+    {
+        $user = Auth::user();
+
+        // Admin / user tanpa department → bebas akses
+        if (!$user || !$user->department_id) {
+            return [
+                'allowed'          => true,
+                'pending'          => false,
+                'remainingSeconds' => null,
+                'pendingRequest'   => null,
+            ];
+        }
+
+        // Setting durasi akses
+        $accessSetting  = DocumentAccessSetting::first();
+        $useTimedAccess = $accessSetting && $accessSetting->enabled && $accessSetting->default_duration_minutes;
+
+        // Ambil approval terakhir
+        $approvedRequest = DocumentAccessRequest::where('user_id', $user->id)
+            ->where('document_id', $document->id)
+            ->where('status', 'approved')
+            ->orderByDesc('decided_at')
+            ->first();
+
+        $hasApprovedAccess = false;
+        $remainingSeconds  = null;
+
+        if ($approvedRequest) {
+            if ($useTimedAccess) {
+                // Hitung batas waktu dari decided_at + default_duration_minutes
+                $startTime  = $approvedRequest->decided_at ?? $approvedRequest->created_at;
+                $validUntil = $startTime
+                    ? (clone $startTime)->addMinutes($accessSetting->default_duration_minutes)
+                    : now()->addMinutes($accessSetting->default_duration_minutes);
+
+                // Simpan ke expires_at supaya kelihatan di log
+                if (!$approvedRequest->expires_at || !$approvedRequest->expires_at->eq($validUntil)) {
+                    $approvedRequest->expires_at = $validUntil;
+                    $approvedRequest->save();
+                }
+
+                if ($validUntil->isFuture()) {
+                    $hasApprovedAccess = true;
+                    $remainingSeconds  = now()->diffInSeconds($validUntil, false);
+                    if ($remainingSeconds < 0) {
+                        $remainingSeconds = 0;
+                    }
+                }
+            } else {
+                // Tanpa pembatasan waktu
+                $hasApprovedAccess = true;
+            }
+        }
+
+        // Kalau tidak ada akses approved yang masih berlaku
+        if (!$hasApprovedAccess) {
+            $pendingRequest = null;
+
+            if ($createPending) {
+                // Dipanggil dari gate (stream) → boleh buat / ambil pending
+                $pendingRequest = DocumentAccessRequest::firstOrCreate(
+                    [
+                        'user_id'     => $user->id,
+                        'document_id' => $document->id,
+                        'status'      => 'pending',
+                    ],
+                    [
+                        'reason'       => null,
+                        'requested_at' => now(),
+                    ]
+                );
+            } else {
+                // Dipanggil dari rawFile → JANGAN buat baru, cukup cek kalau ada pending lama
+                $pendingRequest = DocumentAccessRequest::where('user_id', $user->id)
+                    ->where('document_id', $document->id)
+                    ->where('status', 'pending')
+                    ->latest('requested_at')
+                    ->first();
+            }
+
+            return [
+                'allowed'          => false,
+                'pending'          => (bool) $pendingRequest,
+                'remainingSeconds' => null,
+                'pendingRequest'   => $pendingRequest,
+            ];
+        }
+
+        return [
+            'allowed'          => true,
+            'pending'          => false,
+            'remainingSeconds' => $remainingSeconds,
+            'pendingRequest'   => null,
+        ];
+    }
+
+    /** ---------- Helpers watermark ---------- */
 
     protected function parseTemplateVars(string $tpl, ?Document $doc = null): string
     {
@@ -410,12 +572,11 @@ class DocumentUploadController extends Controller
         $pdf->SetFont('Helvetica', 'B', (int) ($s->font_size ?? 28));
         $pdf->SetTextColor($r, $g, $b);
 
-        // Rotasi: gunakan jika tersedia (FPDI tertentu punya StartTransform/Rotate)
         $this->rotateStart($pdf, (float) ($s->rotation ?? 45), $w/2, $h/2);
 
         if ($s->repeat) {
             $step = max(200, (int) ($s->font_size * 6));
-            for ($y = -$h; $y <= $h*2; $y += $step) {
+            for ($y = -$h * 1; $y <= $h * 2; $y += $step) {
                 $pdf->Text($w/2 - $pdf->GetStringWidth($text)/2, $y, $text);
             }
         } else {
@@ -433,17 +594,19 @@ class DocumentUploadController extends Controller
 
     protected function applyImageWatermark(Fpdi $pdf, WatermarkSetting $s, $w, $h)
     {
-        $path = public_path($s->image_path); // karena kita simpan 'storage/...'
-        if (!file_exists($path)) return;
+        $path = public_path($s->image_path);
+        if (!file_exists($path)) {
+            return;
+        }
 
-        $imgW = $w * 0.5; // skala 50% lebar halaman
-        $imgH = 0;        // biar auto-scale
+        $imgW = $w * 0.5;
+        $imgH = 0;
 
         $this->rotateStart($pdf, (float) ($s->rotation ?? 45), $w/2, $h/2);
 
         if ($s->repeat) {
-            $step = max(300, (int)($w*0.7));
-            for ($y = -$h; $y <= $h*2; $y += $step) {
+            $step = max(300, (int) ($w * 0.7));
+            for ($y = -$h; $y <= $h * 2; $y += $step) {
                 $pdf->Image($path, $w/2 - $imgW/2, $y, $imgW, $imgH);
             }
         } else {
@@ -456,10 +619,18 @@ class DocumentUploadController extends Controller
 
     protected function hexToRgb($hex): array
     {
-        $hex = str_replace('#','',$hex);
-        if (strlen($hex) === 8) $hex = substr($hex,0,6); // abaikan alpha
-        if (strlen($hex) !== 6) return [160,160,160];
-        return [hexdec(substr($hex,0,2)), hexdec(substr($hex,2,2)), hexdec(substr($hex,4,2))];
+        $hex = str_replace('#', '', $hex);
+        if (strlen($hex) === 8) {
+            $hex = substr($hex, 0, 6); // abaikan alpha
+        }
+        if (strlen($hex) !== 6) {
+            return [160,160,160];
+        }
+        return [
+            hexdec(substr($hex, 0, 2)),
+            hexdec(substr($hex, 2, 2)),
+            hexdec(substr($hex, 4, 2))
+        ];
     }
 
     protected function calcPosition(string $pos, float $w, float $h, float $textW, float $fontSize): array
@@ -471,35 +642,49 @@ class DocumentUploadController extends Controller
             case 'bottom-left':  return [$margin, $h - $margin];
             case 'bottom-right': return [$w - $textW - $margin, $h - $margin];
             case 'center':
-            default:             return [($w - $textW)/2, $h/2];
+            default:             return [($w - $textW) / 2, $h / 2];
         }
     }
 
     protected function calcPositionImage(string $pos, float $w, float $h, float $imgW, float $imgH): array
     {
         $margin = 20;
-        $x = $margin; $y = $margin;
+        $x = $margin;
+        $y = $margin;
+
         switch ($pos) {
-            case 'top-left':     $x=$margin;               $y=$margin; break;
-            case 'top-right':    $x=$w-$imgW-$margin;      $y=$margin; break;
-            case 'bottom-left':  $x=$margin;               $y=$h-$imgH-$margin; break;
-            case 'bottom-right': $x=$w-$imgW-$margin;      $y=$h-$imgH-$margin; break;
+            case 'top-left':
+                $x = $margin;
+                $y = $margin;
+                break;
+            case 'top-right':
+                $x = $w - $imgW - $margin;
+                $y = $margin;
+                break;
+            case 'bottom-left':
+                $x = $margin;
+                $y = $h - $imgH - $margin;
+                break;
+            case 'bottom-right':
+                $x = $w - $imgW - $margin;
+                $y = $h - $imgH - $margin;
+                break;
             case 'center':
-            default:             $x=($w-$imgW)/2;          $y=($h-$imgH)/2; break;
+            default:
+                $x = ($w - $imgW) / 2;
+                $y = ($h - $imgH) / 2;
+                break;
         }
+
         return [$x, $y];
     }
 
-    /**
-     * Wrapper rotasi agar aman jika metode tidak tersedia pada FPDF/FPDI yang terpasang
-     */
     protected function rotateStart(Fpdi $pdf, float $angle, float $cx, float $cy): void
     {
         if (method_exists($pdf, 'StartTransform') && method_exists($pdf, 'Rotate')) {
             $pdf->StartTransform();
             $pdf->Rotate($angle, $cx, $cy);
         }
-        // jika tidak ada, biarkan tanpa rotasi (fallback)
     }
 
     protected function rotateStop(Fpdi $pdf): void
