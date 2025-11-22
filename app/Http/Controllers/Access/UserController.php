@@ -6,28 +6,19 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Department;
-<<<<<<< HEAD
 use App\Models\Role;
 use App\Models\Hris\Employee; // model employees di koneksi mysql_hris
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-=======
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rules;
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
 class UserController extends Controller
 {
     /**
-<<<<<<< HEAD
      * Menampilkan daftar user dengan filter + form create/edit.
      * Data utama disimpan di PostgreSQL (tabel users),
      * tetapi bisa punya link ke karyawan HRIS lewat hris_employee_id.
-=======
-     * Menampilkan daftar user dengan filter.
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
      */
     public function index(Request $request)
     {
@@ -35,19 +26,15 @@ class UserController extends Controller
         $filterDeptId = $request->get('department_id');
         $filterStatus = $request->get('status'); // '1' | '0' | null
 
-<<<<<<< HEAD
         // --- AUTO SYNC DATA HRIS KE USERS SETIAP BUKA HALAMAN ---
         $this->syncHrisUsers();
         // --------------------------------------------------------
 
         // Departemen dari DB utama (Postgres)
-=======
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         $departments = Department::where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'code', 'name']);
 
-<<<<<<< HEAD
         // Roles dari DB utama (Postgres)
         $roles = Role::orderBy('name')
             ->get(['id', 'name']);
@@ -91,20 +78,11 @@ class UserController extends Controller
                 $qb->where('department_id', $filterDeptId);
             })
             ->status($filterStatus)
-=======
-        $items = User::with('department:id,code,name')
-            ->search($q)                                 // scopeSearch (lihat model)
-            ->when($filterDeptId, function ($qb) use ($filterDeptId) {
-                $qb->where('department_id', $filterDeptId);
-            })
-            ->status($filterStatus)                      // scopeStatus (lihat model)
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             ->orderBy('name')
             ->paginate(15)
             ->withQueryString();
 
         return view('access.users.index', compact(
-<<<<<<< HEAD
             'items',
             'departments',
             'roles',
@@ -113,26 +91,19 @@ class UserController extends Controller
             'filterDeptId',
             'filterStatus',
             'editUser'
-=======
-            'items', 'departments', 'q', 'filterDeptId', 'filterStatus'
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         ));
     }
 
     /**
      * Menyimpan user baru.
-<<<<<<< HEAD
      *
      * - Jika diisi hris_employee_id, maka name / username / email / password / nomor_wa
      *   diambil dari tabel employees (HRIS) dan tidak boleh diubah dari form.
      * - Kalau tidak pakai HRIS, semuanya pakai input form.
-=======
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
-<<<<<<< HEAD
             'hris_employee_id' => [
                 'nullable',
                 'integer',
@@ -155,19 +126,10 @@ class UserController extends Controller
                 Rules\Password::defaults(),
                 'required_without:hris_employee_id',
             ],
-=======
-            'name'          => ['required', 'string', 'max:100'],
-            'username'      => ['required', 'string', 'max:150', 'unique:users,username'],
-            'email'         => ['required', 'string', 'email', 'max:191', 'unique:users,email'],
-            'department_id' => ['nullable', 'exists:departments,id'],
-            'password'      => ['required', 'confirmed', Rules\Password::defaults()],
-            // checkbox "1" saat dicentang; biarkan nullable agar unchecked tidak error
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             'is_active'     => ['nullable', 'in:1'],
         ]);
 
         DB::transaction(function () use ($validated, $request) {
-<<<<<<< HEAD
             $hrisEmployee = null;
 
             if (!empty($validated['hris_employee_id'])) {
@@ -223,17 +185,6 @@ class UserController extends Controller
                 'role_id'          => $validated['role_id'] ?? null,
                 'password'         => $password,
                 'is_active'        => $request->has('is_active'),
-=======
-            User::create([
-                'name'          => $validated['name'],
-                'username'      => $validated['username'],
-                'email'         => $validated['email'],
-                'department_id' => $validated['department_id'] ?? null,
-                // password akan di-hash oleh mutator di Model User
-                'password'      => $validated['password'],
-                // PENTING: checkbox unchecked → tidak terkirim → harus jadi false
-                'is_active'     => $request->has('is_active'),
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             ]);
         });
 
@@ -243,20 +194,16 @@ class UserController extends Controller
 
     /**
      * Update data user.
-<<<<<<< HEAD
      *
      * - Kalau user sudah terhubung HRIS (hris_employee_id tidak null):
      *   name, username, email, password, nomor_wa diambil dari HRIS dan TIDAK bisa diubah di sini.
      *   Yang bisa diubah: role, is_active, department.
      * - Kalau user tidak pakai HRIS:
      *   boleh ubah name/username/email/nomor_wa manual, password opsional.
-=======
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
      */
     public function update(Request $request, User $user)
     {
         $validated = $request->validate([
-<<<<<<< HEAD
             'hris_employee_id' => [
                 'nullable',
                 'integer',
@@ -268,18 +215,11 @@ class UserController extends Controller
             'nomor_wa'      => ['nullable', 'string', 'max:30'],
             'department_id' => ['nullable', 'exists:departments,id'],
             'role_id'       => ['nullable', 'exists:roles,id'],
-=======
-            'name'          => ['required', 'string', 'max:100'],
-            'username'      => ['required', 'string', 'max:150', 'unique:users,username,' . $user->getKey()],
-            'email'         => ['required', 'string', 'email', 'max:191', 'unique:users,email,' . $user->getKey()],
-            'department_id' => ['nullable', 'exists:departments,id'],
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             'password'      => ['nullable', 'confirmed', Rules\Password::defaults()],
             'is_active'     => ['nullable', 'in:1'],
         ]);
 
         DB::transaction(function () use ($validated, $request, $user) {
-<<<<<<< HEAD
             // kalau user SUDAH HRIS, kita pakai hris_employee_id lama
             $hrisEmployeeId = $user->hris_employee_id ?: ($validated['hris_employee_id'] ?? null);
             $hrisEmployee   = null;
@@ -342,30 +282,12 @@ class UserController extends Controller
             // Hanya set password jika ada nilai baru (HRIS atau manual)
             if ($password !== null) {
                 $payload['password'] = $password;
-=======
-            $payload = [
-                'name'          => $validated['name'],
-                'username'      => $validated['username'],
-                'email'         => $validated['email'],
-                'department_id' => $validated['department_id'] ?? null,
-                // PENTING: perbaikan status
-                'is_active'     => $request->has('is_active'),
-            ];
-
-            // Hanya update password jika diisi; mutator di model akan meng-hash
-            if (!empty($validated['password'])) {
-                $payload['password'] = $validated['password'];
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             }
 
             $user->update($payload);
         });
 
-<<<<<<< HEAD
         return redirect()->route('access.users.index', ['edit' => $user->id])
-=======
-        return redirect()->route('access.users.index')
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             ->with('success', 'User successfully updated.');
     }
 
@@ -381,7 +303,6 @@ class UserController extends Controller
         return redirect()->route('access.users.index')
             ->with('success', 'User successfully deleted.');
     }
-<<<<<<< HEAD
 
     /**
      * Sinkronisasi semua user HRIS dengan data terbaru di tabel employees (HRIS).
@@ -458,6 +379,4 @@ class UserController extends Controller
             }
         }
     }
-=======
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 }

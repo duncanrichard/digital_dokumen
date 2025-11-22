@@ -96,13 +96,8 @@
               </select>
             </div>
             <div class="col-12 col-md-3">
-<<<<<<< HEAD
               <label class="form-label small text-muted mb-1">Divisi</label>
               <select name="department_id" class="form-select select2" data-placeholder="All divisions">
-=======
-              <label class="form-label small text-muted mb-1">Department</label>
-              <select name="department_id" class="form-select select2" data-placeholder="All departments">
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                 <option value=""></option>
                 @foreach($departments as $dep)
                   <option value="{{ $dep->id }}" {{ ($filterDeptId ?? '') === $dep->id ? 'selected' : '' }}>
@@ -190,11 +185,7 @@
                             <th class="text-center">Revision</th>
                             <th>Document Name</th>
                             <th class="text-center">Type</th>
-<<<<<<< HEAD
                             <th class="text-center">Divisi</th>
-=======
-                            <th class="text-center">Department</th>
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                             <th class="text-center">Publish Date</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">File</th>
@@ -242,26 +233,15 @@
 
                               <td class="text-center">
                                 <div class="btn-group btn-group-sm" role="group">
-<<<<<<< HEAD
                                   {{-- VIEW -> ke gate stream() (tidak buka tab baru di sini) --}}
                                   <a href="{{ route('documents.file', $row->id) }}"
-=======
-                                  {{-- VIEW (inline) via stream() agar watermark aktif --}}
-                                  <a href="{{ route('documents.file', $row->id) }}"
-                                     target="_blank" rel="noopener"
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                                      class="btn btn-outline-primary btn-action"
                                      title="View">
                                     <i class="mdi mdi-eye"></i>
                                   </a>
 
-<<<<<<< HEAD
                                   {{-- DOWNLOAD -> langsung ke rawFile, gunakan dl=1 untuk attachment --}}
                                   <a href="{{ route('documents.file.raw', [$row->id, 'dl' => 1]) }}"
-=======
-                                  {{-- DOWNLOAD (attachment) juga lewat stream(), tambahkan ?dl=1 --}}
-                                  <a href="{{ route('documents.file', [$row->id, 'dl' => 1]) }}"
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                                      class="btn btn-outline-secondary btn-action"
                                      title="Download">
                                     <i class="mdi mdi-download"></i>
@@ -369,17 +349,10 @@
             </div>
 
             <div class="col-md-6 mb-3">
-<<<<<<< HEAD
               <label class="form-label required">Divisi</label>
               <select class="form-select select2 @error('department_id') is-invalid @enderror"
                       name="department_id" id="create_department_id"
                       data-placeholder="Select Division" required>
-=======
-              <label class="form-label required">Department</label>
-              <select class="form-select select2 @error('department_id') is-invalid @enderror"
-                      name="department_id" id="create_department_id"
-                      data-placeholder="Select Department" required>
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                 <option value=""></option>
                 @foreach($departments as $dep)
                   <option value="{{ $dep->id }}" {{ old('_from')==='create' && old('department_id')===$dep->id ? 'selected' : '' }}>
@@ -474,13 +447,8 @@
               </select>
             </div>
             <div class="col-md-6 mb-3">
-<<<<<<< HEAD
               <label class="form-label required">Divisi</label>
               <select class="form-select select2" name="department_id" id="edit_department_id" data-placeholder="Select Division" required>
-=======
-              <label class="form-label required">Department</label>
-              <select class="form-select select2" name="department_id" id="edit_department_id" data-placeholder="Select Department" required>
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
                 <option value=""></option>
                 @foreach($departments as $dep)
                   <option value="{{ $dep->id }}" @selected(old('_from')==='edit' && old('department_id')===$dep->id)>{{ $dep->code }} - {{ $dep->name }}</option>
@@ -583,26 +551,18 @@
         form.action = btn.data('update-url') || '#';
         document.getElementById('edit_id').value = btn.data('id') || '';
 
-<<<<<<< HEAD
         const setVal = (id, val) => {
           const el = document.getElementById(id);
           if (el) el.value = val ?? '';
         };
-=======
-        const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         setVal('edit_name', btn.data('name'));
         setVal('edit_publish_date', btn.data('publish_date'));
 
         $('#edit_document_type_id').val(btn.data('document_type_id') || '').trigger('change');
         $('#edit_department_id').val(btn.data('department_id') || '').trigger('change');
 
-<<<<<<< HEAD
         document.getElementById('edit_is_active').checked =
           (btn.data('is_active') === 1 || btn.data('is_active') === '1');
-=======
-        document.getElementById('edit_is_active').checked = (btn.data('is_active') === 1 || btn.data('is_active') === '1');
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
 
         const modal = document.getElementById('editModal');
         setTimeout(() => { initSelect2(modal); }, 100);

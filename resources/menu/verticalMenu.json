@@ -18,12 +18,8 @@
       "submenu": [
         { "url": "/documents/upload",       "name": "Document Library", "slug": "document-control-upload" },
         { "url": "/documents/distribution", "name": "Distribution",     "slug": "document-control-distribution" },
-<<<<<<< HEAD
         { "url": "/documents/revisions",    "name": "Revisions",        "slug": "document-control-revisions" },
         { "url": "/documents/access-approvals","name": "Access Approvals", "slug": "document-control-approvals" }
-=======
-        { "url": "/documents/revisions",    "name": "Revisions",        "slug": "document-control-revisions" }
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
       ]
     },
 
@@ -34,11 +30,7 @@
       "slug": "master-data",
       "submenu": [
         { "url": "/master/jenis-dokumen", "name": "Document Types",      "slug": "master-jenis-dokumen" },
-<<<<<<< HEAD
         { "url": "/master/departments",   "name": "Disisi",         "slug": "master-departments" },
-=======
-        { "url": "/master/departments",   "name": "Departments",         "slug": "master-departments" },
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
         { "url": "/master/tags",          "name": "Tags & Keywords",     "slug": "master-tags" },
         { "url": "/master/locations",     "name": "Physical Locations",  "slug": "master-locations" }
       ]
@@ -64,12 +56,8 @@
       "submenu": [
         { "url": "/settings/notifications", "name": "Notifications",   "slug": "settings-notifications" },
         { "url": "/settings/watermark",     "name": "Watermark/DRM",   "slug": "settings-watermark" },
-<<<<<<< HEAD
         { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" },
         { "url": "/settings/document-access","name": "Document Access", "slug": "settings-document-access" }
-=======
-        { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" }
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
       ]
     }
   ]

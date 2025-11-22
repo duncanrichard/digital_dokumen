@@ -29,7 +29,6 @@ class DepartmentController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-<<<<<<< HEAD
             'code'        => [
                 'required',
                 'max:20',
@@ -37,9 +36,6 @@ class DepartmentController extends Controller
                 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/',
                 'unique:departments,code',
             ],
-=======
-            'code'        => ['required', 'max:20', 'alpha_dash', 'unique:departments,code'],
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             'name'        => ['required', 'max:100'],
             'description' => ['nullable', 'max:1000'],
             'is_active'   => ['required', 'boolean'],
@@ -48,17 +44,12 @@ class DepartmentController extends Controller
         Department::create($validated);
 
         return redirect()->route('master.departments.index')
-<<<<<<< HEAD
             ->with('success', 'Divisi has been created.');
-=======
-            ->with('success', 'Department has been created.');
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     }
 
     public function update(Request $request, Department $department)
     {
         $validated = $request->validate([
-<<<<<<< HEAD
             'code'        => [
                 'required',
                 'max:20',
@@ -66,9 +57,6 @@ class DepartmentController extends Controller
                 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/',
                 'unique:departments,code,' . $department->id,
             ],
-=======
-            'code'        => ['required', 'max:20', 'alpha_dash', 'unique:departments,code,' . $department->id],
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
             'name'        => ['required', 'max:100'],
             'description' => ['nullable', 'max:1000'],
             'is_active'   => ['required', 'boolean'],
@@ -77,11 +65,7 @@ class DepartmentController extends Controller
         $department->update($validated);
 
         return redirect()->route('master.departments.index')
-<<<<<<< HEAD
             ->with('success', 'Divisi has been updated.');
-=======
-            ->with('success', 'Department has been updated.');
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     }
 
     public function destroy(Department $department)
@@ -89,10 +73,6 @@ class DepartmentController extends Controller
         $department->delete();
 
         return redirect()->route('master.departments.index')
-<<<<<<< HEAD
             ->with('success', 'Divisi has been deleted.');
-=======
-            ->with('success', 'Department has been deleted.');
->>>>>>> 680225e2e19fe941c77cea205e063022e1bbb0c0
     }
 }
