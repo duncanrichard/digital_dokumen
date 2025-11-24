@@ -56,7 +56,8 @@
       "submenu": [
         { "url": "/settings/notifications", "name": "Notifications",   "slug": "settings-notifications" },
         { "url": "/settings/watermark",     "name": "Watermark/DRM",   "slug": "settings-watermark" },
-        { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" }
+        { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" },
+        { "url": "/settings/document-access","name": "Document Access", "slug": "settings-document-access" }
       ]
     }
   ]
