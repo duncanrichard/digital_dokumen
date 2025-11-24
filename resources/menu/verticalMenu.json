@@ -30,7 +30,7 @@
       "slug": "master-data",
       "submenu": [
         { "url": "/master/jenis-dokumen", "name": "Document Types",      "slug": "master-jenis-dokumen" },
-        { "url": "/master/departments",   "name": "Disisi",         "slug": "master-departments" },
+        { "url": "/master/departments",   "name": "Divisi",         "slug": "master-departments" },
         { "url": "/master/tags",          "name": "Tags & Keywords",     "slug": "master-tags" },
         { "url": "/master/locations",     "name": "Physical Locations",  "slug": "master-locations" }
       ]
@@ -56,8 +56,7 @@
       "submenu": [
         { "url": "/settings/notifications", "name": "Notifications",   "slug": "settings-notifications" },
         { "url": "/settings/watermark",     "name": "Watermark/DRM",   "slug": "settings-watermark" },
-        { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" },
-        { "url": "/settings/document-access","name": "Document Access", "slug": "settings-document-access" }
+        { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" }
       ]
     }
   ]
