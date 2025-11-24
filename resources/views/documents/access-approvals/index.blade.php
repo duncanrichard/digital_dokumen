@@ -78,27 +78,32 @@
                   </td>
                   <td>
                     @if($row->decider)
-                      <small>{{ $row->decider->name }}<br>
-                      {{ optional($row->decided_at)->format('d M Y H:i') }}</small>
+                      <small>
+                        {{ $row->decider->name }}<br>
+                        {{ optional($row->decided_at)->format('d M Y H:i') }}
+                      </small>
+                    @else
+                      <span class="text-muted small">-</span>
                     @endif
                   </td>
                   <td class="text-center">
                     @if($row->status === 'pending')
-                      <div class="d-flex flex-column gap-1">
-                      <form method="post" action="{{ route('documents.approvals.approve', $row->id) }}">
-
-                          @csrf @method('PUT')
-                          <input type="datetime-local" name="expires_at" class="form-control form-control-sm mb-1"
-                                 placeholder="Expired (optional)">
-                          <button class="btn btn-sm btn-success w-100">
-                            Approve
+                      <div class="d-flex justify-content-center gap-2">
+                        {{-- Approve --}}
+                        <form method="post" action="{{ route('documents.approvals.approve', $row->id) }}" class="d-inline">
+                          @csrf
+                          @method('PUT')
+                          <button class="btn btn-sm btn-success">
+                            <i class="mdi mdi-check-circle-outline me-1"></i> Approve
                           </button>
                         </form>
-                        <form method="post" action="{{ route('documents.approvals.reject', $row->id) }}">
 
-                          @csrf @method('PUT')
-                          <button class="btn btn-sm btn-outline-danger w-100">
-                            Reject
+                        {{-- Reject --}}
+                        <form method="post" action="{{ route('documents.approvals.reject', $row->id) }}" class="d-inline">
+                          @csrf
+                          @method('PUT')
+                          <button class="btn btn-sm btn-outline-danger">
+                            <i class="mdi mdi-close-circle-outline me-1"></i> Reject
                           </button>
                         </form>
                       </div>

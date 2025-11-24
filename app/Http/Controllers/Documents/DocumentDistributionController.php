@@ -9,29 +9,19 @@ use Illuminate\Validation\Rule;
 use App\Models\Document;
 use App\Models\DocumentDistribution;
 use App\Models\Department;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class DocumentDistributionController extends Controller
 {
-    public function __construct()
-    {
-        // $this->middleware('permission:view documents-distribution')->only('index');
-        // $this->middleware('permission:update documents-distribution')->only('store');
-    }
-
-    /**
-     * Halaman utama: pilih dokumen dan centang divisi yang menerima distribusi.
-     * HANYA menampilkan dokumen & divisi yang aktif.
-     */
     public function index(Request $request)
     {
         $q          = trim((string) $request->query('q', ''));
         $documentId = (string) $request->query('document_id', '');
 
-        // Driver-specific case-insensitive LIKE
         $driver = DB::getDriverName();
         $likeOp = $driver === 'pgsql' ? 'ILIKE' : 'LIKE';
 
-        // Daftar dokumen aktif (bisa di-search)
         $docs = Document::query()
             ->where('is_active', true)
             ->when($q !== '', function ($qq) use ($q, $likeOp) {
@@ -52,27 +42,22 @@ class DocumentDistributionController extends Controller
                 'is_active',
             ]);
 
-        // default dokumen pertama
         if ($documentId === '' && $docs->isNotEmpty()) {
             $documentId = (string) $docs->first()->id;
         }
 
-        // dokumen terpilih (include department_id sebagai divisi utama)
         $selectedDoc = $documentId
             ? Document::where('is_active', true)->find($documentId)
             : null;
 
-        // divisi aktif
         $departments = Department::where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        // distribusi yang sudah ada utk dokumen terpilih
         $distributions = $selectedDoc
             ? DocumentDistribution::where('document_id', $selectedDoc->id)->get()
             : collect();
 
-        // divisi yang sudah dipilih
         $selectedDepartments = $distributions->pluck('department_id')->all();
 
         return view('documents.distribution.index', [
@@ -85,14 +70,6 @@ class DocumentDistributionController extends Controller
         ]);
     }
 
-    /**
-     * Simpan mapping distribution (sinkron).
-     * TANPA kirim email.
-     *
-     * Catatan:
-     * - Divisi utama dokumen (document->department_id) SELALU ikut distribusi,
-     *   walaupun tidak dicentang di form (dipaksa di-backend).
-     */
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -112,24 +89,18 @@ class DocumentDistributionController extends Controller
         ]);
 
         $documentId = (string) $data['document_id'];
+        $document   = Document::where('is_active', true)->findOrFail($documentId);
 
-        // Ambil dokumen untuk mengetahui divisi utama
-        $document = Document::where('is_active', true)->findOrFail($documentId);
         $primaryDeptId = $document->department_id ? (string) $document->department_id : null;
+        $deptIds       = array_values(array_unique(array_map('strval', $data['department_id'] ?? [])));
 
-        // Divisi dari form
-        $deptIds = array_values(array_unique(array_map('strval', $data['department_id'] ?? [])));
-
-        // Paksa tambahkan divisi utama ke distribusi (kalau ada)
         if ($primaryDeptId) {
             $deptIds[] = $primaryDeptId;
         }
 
-        // Unik lagi setelah ditambah primary
         $deptIds = array_values(array_unique($deptIds));
 
         DB::transaction(function () use ($documentId, $deptIds) {
-            // Hapus distribusi lama
             DocumentDistribution::where('document_id', $documentId)->delete();
 
             if (!empty($deptIds)) {
@@ -140,19 +111,87 @@ class DocumentDistributionController extends Controller
                     $rows[] = [
                         'document_id'   => $documentId,
                         'department_id' => $d,
-                        // kalau tabel masih punya kolom is_active, kita set default true
                         'is_active'     => true,
                         'created_at'    => $now,
                         'updated_at'    => $now,
                     ];
                 }
-
                 DocumentDistribution::insert($rows);
             }
         });
 
+        // ========================================
+        //        PENGIRIMAN NOTIFIKASI FONNTE
+        // ========================================
+        try {
+            $deptNames = Department::whereIn('id', $deptIds)
+                ->orderBy('name')
+                ->pluck('name')
+                ->toArray();
+
+            $groupId = '120363404395085332@g.us';
+            $token   = 'nbrnAs1M8J94FxwTTgo2';
+
+            // Format tanggal terbit (jika ada)
+            $publishDate = $document->publish_date
+                ? $document->publish_date->format('d M Y')
+                : '-';
+
+            // Buat list bernomor untuk Divisi Tujuan
+            $divisiList = "";
+            foreach ($deptNames as $index => $name) {
+                $no = $index + 1;
+                $divisiList .= "   {$no}. {$name}\n";
+            }
+
+            // ===== Pesan Corporate, Profesional + URL Sistem =====
+            $message =
+                "*Pemberitahuan Distribusi Dokumen*\n\n" .
+                "Yth. Bapak/Ibu Rekan Kerja,\n\n" .
+                "Sehubungan dengan pengelolaan dokumen perusahaan, bersama ini kami informasikan bahwa telah diterbitkan dokumen baru dengan rincian sebagai berikut:\n\n" .
+                "• *Judul Dokumen*   : {$document->name}\n" .
+                "• *Nomor Dokumen*   : {$document->document_number}\n" .
+                "• *Tanggal Terbit*  : {$publishDate}\n" .
+                "• *Divisi Tujuan*   :\n" .
+                $divisiList . "\n" .
+                "• *Diterbitkan Oleh*: Legal Department\n\n" .
+                "Dokumen tersebut dapat diakses melalui sistem *Document Control* pada tautan berikut:\n" .
+                "https://demo.dokumen.dsicorp.id/\n\n" .
+                "Mohon kepada divisi terkait untuk meninjau dan menindaklanjuti dokumen dimaksud sesuai kebutuhan dan prosedur yang berlaku.\n\n" .
+                "Atas perhatian dan kerja sama yang baik, kami ucapkan terima kasih.\n\n" .
+                "Hormat kami,\n" .
+                "*Document Control System*";
+
+            // bypass SSL only in local (Windows dev)
+            $httpOptions = [];
+            if (app()->environment('local')) {
+                $httpOptions['verify'] = false;
+            }
+
+            $response = Http::withOptions($httpOptions)
+                ->withHeaders([
+                    'Authorization' => $token,
+                ])
+                ->asForm()
+                ->post('https://api.fonnte.com/send', [
+                    'target'  => $groupId,
+                    'message' => $message,
+                ]);
+
+            Log::info('Fonnte response', [
+                'status'  => $response->status(),
+                'body'    => $response->body(),
+                'doc_id'  => $documentId,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('WA Fonnte Error', [
+                'error' => $e->getMessage(),
+                'doc'   => $documentId,
+            ]);
+        }
+
         return redirect()
             ->route('documents.distribution.index', ['document_id' => $documentId])
-            ->with('success', 'Distribusi dokumen berhasil disimpan.');
+            ->with('success', 'Distribusi dokumen berhasil disimpan & notifikasi telah dikirim.');
     }
 }
