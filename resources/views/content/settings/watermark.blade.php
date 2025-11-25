@@ -27,7 +27,7 @@
         <h4 class="card-title mb-0">Watermark / DRM</h4>
       </div>
       <div class="card-body">
-        <form method="POST" action="{{ route('settings-watermark.update') }}" enctype="multipart/form-data">
+<form method="POST" action="{{ route('settings.watermark.update') }}" enctype="multipart/form-data">
           @csrf
 
           <div class="form-check form-switch mb-3">

@@ -145,22 +145,24 @@ class DocumentDistributionController extends Controller
             }
 
             // ===== Pesan Corporate, Profesional + URL Sistem =====
-            $message =
-                "*Pemberitahuan Distribusi Dokumen*\n\n" .
-                "Yth. Bapak/Ibu Rekan Kerja,\n\n" .
-                "Sehubungan dengan pengelolaan dokumen perusahaan, bersama ini kami informasikan bahwa telah diterbitkan dokumen baru dengan rincian sebagai berikut:\n\n" .
-                "• *Judul Dokumen*   : {$document->name}\n" .
-                "• *Nomor Dokumen*   : {$document->document_number}\n" .
-                "• *Tanggal Terbit*  : {$publishDate}\n" .
-                "• *Divisi Tujuan*   :\n" .
-                $divisiList . "\n" .
-                "• *Diterbitkan Oleh*: Legal Department\n\n" .
-                "Dokumen tersebut dapat diakses melalui sistem *Document Control* pada tautan berikut:\n" .
-                "https://demo.dokumen.dsicorp.id/\n\n" .
-                "Mohon kepada divisi terkait untuk meninjau dan menindaklanjuti dokumen dimaksud sesuai kebutuhan dan prosedur yang berlaku.\n\n" .
-                "Atas perhatian dan kerja sama yang baik, kami ucapkan terima kasih.\n\n" .
-                "Hormat kami,\n" .
-                "*Document Control System*";
+$message =
+    "*Pemberitahuan Distribusi Dokumen Resmi*\n\n" .
+    "Yth. Bapak/Ibu Rekan Kerja\n" .
+    "Dengan hormat,\n\n" .
+    "Sebagai bagian dari pengelolaan dan pengendalian dokumen perusahaan, bersama ini kami sampaikan bahwa telah diterbitkan dokumen baru dengan rincian sebagai berikut:\n\n" .
+    "• *Judul Dokumen*    : {$document->name}\n" .
+    "• *Nomor Dokumen*    : {$document->document_number}\n" .
+    "• *Tanggal Terbit*   : {$publishDate}\n" .
+    "• *Divisi Distribution*    :\n" .
+    $divisiList . "\n" .
+    "• *Diterbitkan oleh* : Legal\n\n" .
+    "Dokumen dimaksud dapat diakses melalui sistem *Document Control* pada tautan berikut:\n" .
+    "https://demo.dokumen.dsicorp.id/\n\n" .
+    "Dimohon kepada divisi yang terkait untuk segera meninjau, mendistribusikan, dan menindaklanjuti dokumen tersebut sesuai dengan tugas, kewenangan, dan prosedur yang berlaku di lingkungan perusahaan.\n\n" .
+    "Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja sama Bapak/Ibu, kami ucapkan terima kasih.\n\n" .
+    "Hormat kami,\n" .
+    "Divisi Legal\n" ;
+
 
             // bypass SSL only in local (Windows dev)
             $httpOptions = [];

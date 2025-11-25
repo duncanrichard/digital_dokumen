@@ -6,7 +6,9 @@
       "icon": "menu-icon tf-icons mdi mdi-home-outline",
       "slug": "dashboard",
       "submenu": [
-        { "url": "/", "name": "Analytics", "slug": "dashboard-analytics" }
+        {  "url": "/",
+          "name": "Analytics",
+          "slug": "dashboard-analytics" }
       ]
     },
 
@@ -54,7 +56,6 @@
       "icon": "menu-icon tf-icons mdi mdi-cog-outline",
       "slug": "settings",
       "submenu": [
-        { "url": "/settings/notifications", "name": "Notifications",   "slug": "settings-notifications" },
         { "url": "/settings/watermark",     "name": "Watermark/DRM",   "slug": "settings-watermark" },
         { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" },
         { "url": "/settings/document-access","name": "Document Access", "slug": "settings-document-access" }

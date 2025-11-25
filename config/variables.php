@@ -1,14 +1,21 @@
 <?php
-  // Variables
-  return [
-    "creatorName" => "ThemeSelection",
-    "creatorUrl" => "https://themeselection.com",
-    "templateName" => "Materio",
-    "templateSuffix" => "Bootstrap 5 HTML Laravel Free Admin Template",
+// Variables
+return [
+    // ================================
+    // COMPANY / BRANDING INFORMATION
+    // ================================
+    "creatorName" => "PT DSICORP",
+    "creatorUrl" => "#",
+
+    // ================================
+    // APPLICATION IDENTITY
+    // ================================
+    "templateName" => "Document Control System",
+    "templateSuffix" => "Corporate Document Management Platform",
     "templateVersion" => "1.0.0",
-    "templateFree" => true,
-    "templateDescription" => "Most Powerful & Comprehensive Bootstrap 5 HTML Admin Dashboard Template built for developers!",
-    "templateKeyword" => "dashboard, bootstrap 5 dashboard, bootstrap 5 design, bootstrap 5, bootstrap 5 free, free admin template",
+    "templateFree" => false,
+    "templateDescription" => "",
+    "templateKeyword" => "",
     "licenseUrl" => "https://themeselection.com/license/",
     "livePreview" => "https://demos.themeselection.com/materio-bootstrap-html-laravel-admin-template-free/demo/",
     "productPage" => "https://themeselection.com/item/materio-free-bootstrap-html-laravel-admin-template/",

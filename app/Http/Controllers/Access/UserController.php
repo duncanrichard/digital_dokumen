@@ -28,6 +28,7 @@ class UserController extends Controller
 
         // --- AUTO SYNC DATA HRIS KE USERS SETIAP BUKA HALAMAN ---
         $this->syncHrisUsers();
+        
         // --------------------------------------------------------
 
         // Departemen dari DB utama (Postgres)
@@ -311,6 +312,7 @@ class UserController extends Controller
      * - Field yang disinkronkan: name, username, email, password, nomor_wa.
      * - department_id & role_id TIDAK diubah.
      */
+
     protected function syncHrisUsers(): void
     {
         // ambil semua user yang terhubung HRIS
