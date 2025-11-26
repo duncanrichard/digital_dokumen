@@ -19,6 +19,80 @@ use setasign\Fpdi\Fpdi;
 
 class DocumentUploadController extends Controller
 {
+    public function __construct()
+    {
+        // Semua action butuh user login
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (!$user) {
+                abort(401);
+            }
+
+            // ==============================
+            // 1. CEK SUPERADMIN DARI role_id
+            // ==============================
+            $roleName     = optional($user->role)->name; // relasi role() di model User
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+            if ($isSuperadmin) {
+                // Superadmin bebas akses semua method
+                return $next($request);
+            }
+
+            // ========================================
+            // 2. USER BIASA → CEK PERMISSION DARI ROLE
+            // ========================================
+            $role   = $user->role; // App\Models\Role (extends Spatie Role)
+            $method = $request->route()->getActionMethod(); // nama method controller
+
+            // Mapping method -> permission yang dibutuhkan
+            $requiredPermission = null;
+
+            switch ($method) {
+                // Aksi-aksi yang hanya "view / akses" dokumen
+                case 'index':
+                case 'open':
+                case 'stream':
+                case 'rawFile':
+                case 'markAllNotificationsRead':
+                    $requiredPermission = 'documents.upload.view';
+                    break;
+
+                // Simpan dokumen baru / revisi
+                case 'store':
+                    $requiredPermission = 'documents.upload.create';
+                    break;
+
+                // Edit / update dokumen
+                case 'edit':
+                case 'update':
+                    $requiredPermission = 'documents.upload.update';
+                    break;
+
+                // Hapus dokumen
+                case 'destroy':
+                    $requiredPermission = 'documents.upload.delete';
+                    break;
+
+                default:
+                    // Default bisa kamu set ke view, atau dibiarkan null
+                    $requiredPermission = 'documents.upload.view';
+                    break;
+            }
+
+            if ($requiredPermission) {
+                $hasPermission = $role && $role->hasPermissionTo($requiredPermission);
+
+                if (!$hasPermission) {
+                    abort(403, 'Anda tidak memiliki izin untuk mengakses fitur ini.');
+                }
+            }
+
+            return $next($request);
+        });
+    }
+
     // ================== LIST / FILTER ==================
     public function index(Request $request)
     {

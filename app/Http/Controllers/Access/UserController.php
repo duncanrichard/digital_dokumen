@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Department;
 use App\Models\Role;
-use App\Models\Hris\Employee; // model employees di koneksi mysql_hris
+use App\Models\Hris\Employee;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\Rule;
@@ -15,33 +15,59 @@ use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (! $user) {
+                abort(401);
+            }
+
+            $roleName     = optional($user->role)->name;
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+            if ($isSuperadmin) {
+                return $next($request);
+            }
+
+            $method = $request->route()->getActionMethod();
+
+            $requiredPermission = match ($method) {
+                'index'  => 'access.users.view',
+                'store'  => 'access.users.create',
+                'update' => 'access.users.update',
+                'destroy'=> 'access.users.delete',
+                default  => 'access.users.view',
+            };
+
+            if (! $user->role || ! $user->role->hasPermissionTo($requiredPermission)) {
+                abort(403, 'Anda tidak memiliki izin untuk mengakses fitur ini.');
+            }
+
+            return $next($request);
+        });
+    }
+
     /**
      * Menampilkan daftar user dengan filter + form create/edit.
-     * Data utama disimpan di PostgreSQL (tabel users),
-     * tetapi bisa punya link ke karyawan HRIS lewat hris_employee_id.
      */
     public function index(Request $request)
     {
         $q            = trim((string) $request->get('q'));
         $filterDeptId = $request->get('department_id');
-        $filterStatus = $request->get('status'); // '1' | '0' | null
+        $filterStatus = $request->get('status');
 
-        // --- AUTO SYNC DATA HRIS KE USERS SETIAP BUKA HALAMAN ---
+        // auto sync HRIS
         $this->syncHrisUsers();
-        
-        // --------------------------------------------------------
 
-        // Departemen dari DB utama (Postgres)
         $departments = Department::where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'code', 'name']);
 
-        // Roles dari DB utama (Postgres)
-        $roles = Role::orderBy('name')
-            ->get(['id', 'name']);
+        $roles = Role::orderBy('name')->get(['id', 'name']);
 
-        // cek apakah sedang edit user tertentu
-        $editUser = null;
+        $editUser      = null;
         $editingHrisId = null;
         if ($request->filled('edit')) {
             $editUser = User::with([
@@ -53,31 +79,25 @@ class UserController extends Controller
             $editingHrisId = $editUser->hris_employee_id;
         }
 
-        // ambil semua hris_employee_id yang sudah dipakai user lain
         $usedHrisIds = User::whereNotNull('hris_employee_id')
-            ->when($editingHrisId, function ($q) use ($editingHrisId) {
-                // saat edit user HRIS, boleh tetap pakai dirinya sendiri
-                $q->where('hris_employee_id', '!=', $editingHrisId);
+            ->when($editingHrisId, function ($q2) use ($editingHrisId) {
+                $q2->where('hris_employee_id', '!=', $editingHrisId);
             })
             ->pluck('hris_employee_id')
             ->toArray();
 
-        // Daftar karyawan HRIS untuk dropdown -> exclude yang sudah dipakai user lain
         $employees = Employee::whereNotIn('id', $usedHrisIds)
             ->orderBy('name')
             ->limit(200)
             ->get(['id', 'name', 'email', 'office_phone']);
 
-        // Query users dari DB utama, dengan relasi department, role, dan hrisEmployee
         $items = User::with([
                 'department:id,code,name',
                 'role:id,name',
                 'hrisEmployee:id,name,email,office_phone',
             ])
             ->search($q)
-            ->when($filterDeptId, function ($qb) use ($filterDeptId) {
-                $qb->where('department_id', $filterDeptId);
-            })
+            ->when($filterDeptId, fn($qb) => $qb->where('department_id', $filterDeptId))
             ->status($filterStatus)
             ->orderBy('name')
             ->paginate(15)
@@ -95,13 +115,6 @@ class UserController extends Controller
         ));
     }
 
-    /**
-     * Menyimpan user baru.
-     *
-     * - Jika diisi hris_employee_id, maka name / username / email / password / nomor_wa
-     *   diambil dari tabel employees (HRIS) dan tidak boleh diubah dari form.
-     * - Kalau tidak pakai HRIS, semuanya pakai input form.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -110,17 +123,12 @@ class UserController extends Controller
                 'integer',
                 Rule::exists('mysql_hris.employees', 'id'),
             ],
-
-            // kalau pakai HRIS, field2 ini boleh kosong (akan diisi dari HRIS)
             'name'          => ['nullable', 'string', 'max:100'],
             'username'      => ['nullable', 'string', 'max:150'],
             'email'         => ['nullable', 'string', 'email', 'max:191'],
             'nomor_wa'      => ['nullable', 'string', 'max:30'],
-
             'department_id' => ['nullable', 'exists:departments,id'],
             'role_id'       => ['nullable', 'exists:roles,id'],
-
-            // password Wajib jika TIDAK pakai HRIS
             'password'      => [
                 'nullable',
                 'confirmed',
@@ -137,33 +145,28 @@ class UserController extends Controller
                 $hrisEmployee = Employee::find($validated['hris_employee_id']);
             }
 
-            // Default dari input
             $name     = $validated['name']     ?? null;
             $username = $validated['username'] ?? null;
             $email    = $validated['email']    ?? null;
             $nomorWa  = $validated['nomor_wa'] ?? null;
             $password = $validated['password'] ?? null;
 
-            // Jika pakai HRIS → override name/username/email/password/nomor_wa
             if ($hrisEmployee) {
                 $name     = $hrisEmployee->name;
-                $username = $hrisEmployee->name;           // username diambil dari name HRIS
+                $username = $hrisEmployee->name;
                 $email    = $hrisEmployee->email;
-                $nomorWa  = $hrisEmployee->office_phone;   // WA dari HRIS.office_phone
-                $password = $hrisEmployee->password;       // password dari tabel HRIS (sudah hash)
+                $nomorWa  = $hrisEmployee->office_phone;
+                $password = $hrisEmployee->password;
             }
 
-            // Pastikan name / username / email / password terisi
             if (!$name || !$username || !$email || !$password) {
                 throw ValidationException::withMessages([
                     'hris_employee_id' => [
-                        'Nama, username, email, dan password harus terisi, ' .
-                        'baik dari HRIS maupun input manual.',
+                        'Nama, username, email, dan password harus terisi, baik dari HRIS maupun input manual.',
                     ],
                 ]);
             }
 
-            // Cek unik username & email berdasarkan nilai akhir (setelah dari HRIS / manual)
             if (User::where('username', $username)->exists()) {
                 throw ValidationException::withMessages([
                     'username' => ['Username sudah dipakai oleh user lain.'],
@@ -193,15 +196,6 @@ class UserController extends Controller
             ->with('success', 'User successfully created.');
     }
 
-    /**
-     * Update data user.
-     *
-     * - Kalau user sudah terhubung HRIS (hris_employee_id tidak null):
-     *   name, username, email, password, nomor_wa diambil dari HRIS dan TIDAK bisa diubah di sini.
-     *   Yang bisa diubah: role, is_active, department.
-     * - Kalau user tidak pakai HRIS:
-     *   boleh ubah name/username/email/nomor_wa manual, password opsional.
-     */
     public function update(Request $request, User $user)
     {
         $validated = $request->validate([
@@ -221,7 +215,6 @@ class UserController extends Controller
         ]);
 
         DB::transaction(function () use ($validated, $request, $user) {
-            // kalau user SUDAH HRIS, kita pakai hris_employee_id lama
             $hrisEmployeeId = $user->hris_employee_id ?: ($validated['hris_employee_id'] ?? null);
             $hrisEmployee   = null;
 
@@ -229,7 +222,6 @@ class UserController extends Controller
                 $hrisEmployee = Employee::find($hrisEmployeeId);
             }
 
-            // Default ke nilai lama user
             $name     = $validated['name']     ?? $user->name;
             $username = $validated['username'] ?? $user->username;
             $email    = $validated['email']    ?? $user->email;
@@ -237,14 +229,12 @@ class UserController extends Controller
             $password = null;
 
             if ($hrisEmployee) {
-                // User HRIS → pakai data HRIS, email & password tidak bisa diubah di sini
                 $name     = $hrisEmployee->name;
                 $username = $hrisEmployee->name;
                 $email    = $hrisEmployee->email;
                 $nomorWa  = $hrisEmployee->office_phone;
-                $password = $hrisEmployee->password; // sinkron dari HRIS
+                $password = $hrisEmployee->password;
             } else {
-                // Non-HRIS → boleh ubah manual, password opsional
                 if (!empty($validated['password'])) {
                     $password = $validated['password'];
                 }
@@ -256,7 +246,6 @@ class UserController extends Controller
                 ]);
             }
 
-            // Cek unik username & email berdasarkan nilai akhir (ignore diri sendiri)
             if (User::where('id', '!=', $user->id)->where('username', $username)->exists()) {
                 throw ValidationException::withMessages([
                     'username' => ['Username sudah dipakai oleh user lain.'],
@@ -280,7 +269,6 @@ class UserController extends Controller
                 'is_active'        => $request->has('is_active'),
             ];
 
-            // Hanya set password jika ada nilai baru (HRIS atau manual)
             if ($password !== null) {
                 $payload['password'] = $password;
             }
@@ -292,9 +280,6 @@ class UserController extends Controller
             ->with('success', 'User successfully updated.');
     }
 
-    /**
-     * Hapus user.
-     */
     public function destroy(User $user)
     {
         DB::transaction(function () use ($user) {
@@ -305,17 +290,8 @@ class UserController extends Controller
             ->with('success', 'User successfully deleted.');
     }
 
-    /**
-     * Sinkronisasi semua user HRIS dengan data terbaru di tabel employees (HRIS).
-     *
-     * - Hanya menyentuh user yang punya hris_employee_id.
-     * - Field yang disinkronkan: name, username, email, password, nomor_wa.
-     * - department_id & role_id TIDAK diubah.
-     */
-
     protected function syncHrisUsers(): void
     {
-        // ambil semua user yang terhubung HRIS
         $users = User::whereNotNull('hris_employee_id')->get([
             'id',
             'hris_employee_id',
@@ -326,57 +302,26 @@ class UserController extends Controller
             'nomor_wa',
         ]);
 
-        if ($users->isEmpty()) {
-            return;
-        }
+        if ($users->isEmpty()) return;
 
         $hrisIds = $users->pluck('hris_employee_id')->filter()->unique()->values()->all();
 
-        // ambil semua employee HRIS yg diperlukan
-        $employees = Employee::whereIn('id', $hrisIds)->get(['id', 'name', 'email', 'password', 'office_phone']);
-
-        // jadikan map [id => Employee]
-        $employeesMap = $employees->keyBy('id');
+        $employees = Employee::whereIn('id', $hrisIds)
+            ->get(['id', 'name', 'email', 'password', 'office_phone'])
+            ->keyBy('id');
 
         foreach ($users as $user) {
-            $emp = $employeesMap->get($user->hris_employee_id);
-            if (!$emp) {
-                // kalau employee sudah hilang di HRIS, skip saja
-                continue;
-            }
+            $emp = $employees->get($user->hris_employee_id);
+            if (!$emp) continue;
 
-            $newName     = $emp->name;
-            $newUsername = $emp->name;          // sesuai aturan: username = name HRIS
-            $newEmail    = $emp->email;
-            $newPass     = $emp->password;      // diasumsikan sudah hash di HRIS
-            $newWa       = $emp->office_phone;
-
-            // cek kalau ada perubahan
-            $dirty = false;
             $updateData = [];
+            if ($user->name !== $emp->name)           $updateData['name']      = $emp->name;
+            if ($user->username !== $emp->name)       $updateData['username']  = $emp->name;
+            if ($user->email !== $emp->email)         $updateData['email']     = $emp->email;
+            if ($user->password !== $emp->password)   $updateData['password']  = $emp->password;
+            if ($user->nomor_wa !== $emp->office_phone) $updateData['nomor_wa'] = $emp->office_phone;
 
-            if ($user->name !== $newName) {
-                $updateData['name'] = $newName;
-                $dirty = true;
-            }
-            if ($user->username !== $newUsername) {
-                $updateData['username'] = $newUsername;
-                $dirty = true;
-            }
-            if ($user->email !== $newEmail) {
-                $updateData['email'] = $newEmail;
-                $dirty = true;
-            }
-            if ($user->password !== $newPass) {
-                $updateData['password'] = $newPass;
-                $dirty = true;
-            }
-            if ($user->nomor_wa !== $newWa) {
-                $updateData['nomor_wa'] = $newWa;
-                $dirty = true;
-            }
-
-            if ($dirty) {
+            if (!empty($updateData)) {
                 $user->update($updateData);
             }
         }

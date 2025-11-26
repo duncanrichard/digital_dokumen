@@ -3,15 +3,18 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use App\Models\Hris\Employee; // <── MODEL KARYAWAN HRIS (MYSQL)
+
+use App\Models\Hris\Employee; // MODEL KARYAWAN HRIS (MySQL)
+use App\Models\Department;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasUuids;
+    use HasFactory, Notifiable, HasUuids, HasRoles;
 
     /**
      * Tabel utama (PostgreSQL).
@@ -33,9 +36,9 @@ class User extends Authenticatable
         'username',
         'email',
         'password',
-        'nomor_wa',           // <── nomor WhatsApp
+        'nomor_wa',           // nomor WhatsApp
         'department_id',
-        'role_id',
+        'role_id',            // role utama (reference ke tabel roles — bisa selaras dengan Spatie Role)
         'is_active',
     ];
 
@@ -53,7 +56,6 @@ class User extends Authenticatable
     protected $casts = [
         'is_active' => 'boolean',
         'password'  => 'hashed',
-        // 'hris_employee_id' => 'integer', // boleh diaktifkan kalau id di HRIS integer
     ];
 
     /**
@@ -66,6 +68,12 @@ class User extends Authenticatable
 
     /**
      * Relasi ke Role (1 user = 1 role, Postgres).
+     *
+     * NOTE:
+     * - Ini role "utama" via kolom role_id.
+     * - Untuk permission & pengecekan dari Spatie, gunakan:
+     *   $user->roles (many-to-many spatie) atau
+     *   $user->hasRole('Superadmin'), dll.
      */
     public function role()
     {

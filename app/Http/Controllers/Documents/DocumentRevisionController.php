@@ -13,6 +13,37 @@ use Illuminate\Support\Facades\Storage;
 
 class DocumentRevisionController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (! $user) {
+                abort(401);
+            }
+
+            // ambil role dari relasi role() di model User
+            $role     = $user->role;
+            $roleName = $role->name ?? null;
+
+            // Superadmin bebas akses
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+            if ($isSuperadmin) {
+                return $next($request);
+            }
+
+            // CEK PERMISSION BERDASARKAN ROLE
+            // pastikan nama permission sama persis dg di seeder & di tabel permissions
+            $hasPermission = $role && $role->hasPermissionTo('documents.revisions.view');
+
+            if (! $hasPermission) {
+                abort(403, 'Anda tidak memiliki izin untuk mengakses halaman Revisi Dokumen.');
+            }
+
+            return $next($request);
+        });
+    }
+
     public function index(Request $request)
     {
         $q             = trim((string) $request->get('q', ''));
@@ -21,10 +52,12 @@ class DocumentRevisionController extends Controller
 
         // Master data (aktif)
         $documentTypes = JenisDokumen::where('is_active', true)
-            ->orderBy('nama')->get(['id','kode','nama']);
+            ->orderBy('nama')
+            ->get(['id','kode','nama']);
 
         $departments = Department::where('is_active', true)
-            ->orderBy('name')->get(['id','code','name']);
+            ->orderBy('name')
+            ->get(['id','code','name']);
 
         // Ambil dokumen lalu kelompokkan per document_number
         $items = Document::with(['jenisDokumen:id,kode,nama', 'department:id,code,name'])
@@ -45,13 +78,18 @@ class DocumentRevisionController extends Controller
         $grouped = collect($items->items())->groupBy('document_number');
 
         return view('documents.revisions.index', compact(
-            'items', 'grouped', 'q', 'documentTypes', 'departments', 'filterJenisId', 'filterDeptId'
+            'items',
+            'grouped',
+            'q',
+            'documentTypes',
+            'departments',
+            'filterJenisId',
+            'filterDeptId'
         ));
     }
 
     /**
      * Create a new revision based on latest row of a document_number.
-     * Expects: base_id (uuid of any row belonging to the base number), document_name, publish_date, file, is_active
      */
     public function store(Request $request)
     {
@@ -60,7 +98,7 @@ class DocumentRevisionController extends Controller
             'document_name'  => ['required','string','max:255'],
             'publish_date'   => ['required','date'],
             'file'           => ['required','file','mimes:pdf','max:10240'],
-            'is_active'      => ['nullable','in:1']
+            'is_active'      => ['nullable','in:1'],
         ]);
 
         $storedPath = $request->file('file')->store('documents', 'public');
@@ -91,7 +129,8 @@ class DocumentRevisionController extends Controller
             ]);
         });
 
-        return redirect()->route('documents.revisions.index')
+        return redirect()
+            ->route('documents.revisions.index')
             ->with('success', "Revision created: {$base->document_number} R{$nextRevision}");
     }
 }

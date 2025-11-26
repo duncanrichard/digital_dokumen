@@ -2,26 +2,23 @@
 
 namespace App\Providers;
 
-// use Illuminate\Support\Facades\Gate;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use Illuminate\Support\Facades\Gate;
 
 class AuthServiceProvider extends ServiceProvider
 {
-    /**
-     * The model to policy mappings for the application.
-     *
-     * @var array<class-string, class-string>
-     */
     protected $policies = [
-        // 'App\Models\Model' => 'App\Policies\ModelPolicy',
+        // ...
     ];
 
-    /**
-     * Register any authentication / authorization services.
-     */
     public function boot(): void
     {
         $this->registerPolicies();
-        //
+
+        // SUPERADMIN BYPASS SEMUA PERMISSION
+        Gate::before(function ($user, $ability) {
+            // kalau user punya role "Superadmin" (Spatie)
+            return $user->hasRole('Superadmin') ? true : null;
+        });
     }
 }

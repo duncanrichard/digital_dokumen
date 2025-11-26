@@ -8,13 +8,46 @@ use Illuminate\Http\Request;
 
 class JenisDokumenController extends Controller
 {
+    public function __construct()
+    {
+        // Check user login
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (!$user) abort(401);
+
+            // SUPERADMIN bypass
+            $roleName = optional($user->role)->name;
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+            if ($isSuperadmin) {
+                return $next($request);
+            }
+
+            // Permission mapping
+            $method = $request->route()->getActionMethod();
+            $requiredPermission = match ($method) {
+                'index'  => 'master.jenis-dokumen.view',
+                'store'  => 'master.jenis-dokumen.create',
+                'update' => 'master.jenis-dokumen.update',
+                'destroy'=> 'master.jenis-dokumen.delete',
+                default  => 'master.jenis-dokumen.view',
+            };
+
+            if (!$user->role || !$user->role->hasPermissionTo($requiredPermission)) {
+                abort(403, 'Anda tidak memiliki izin untuk melakukan aksi ini.');
+            }
+
+            return $next($request);
+        });
+    }
+
     public function index(Request $request)
     {
         $q = trim((string) $request->get('q'));
 
         $items = JenisDokumen::when($q !== '', function ($query) use ($q) {
                 $query->where(function ($sub) use ($q) {
-                    // PostgreSQL case-insensitive search
                     $sub->where('kode', 'ilike', "%{$q}%")
                         ->orWhere('nama', 'ilike', "%{$q}%");
                 });
@@ -29,7 +62,6 @@ class JenisDokumenController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            // DIGANTI: alpha_dash → regex yang mengizinkan huruf, angka, -, _, dan .
             'kode'      => [
                 'required',
                 'max:20',
@@ -39,8 +71,6 @@ class JenisDokumenController extends Controller
             'nama'      => ['required', 'max:100'],
             'deskripsi' => ['nullable', 'max:1000'],
             'is_active' => ['required', 'boolean'],
-        ], [
-            'kode.regex' => 'Kode hanya boleh berisi huruf, angka, titik (.), strip (-), dan garis bawah (_).',
         ]);
 
         JenisDokumen::create($validated);
@@ -62,8 +92,6 @@ class JenisDokumenController extends Controller
             'nama'      => ['required', 'max:100'],
             'deskripsi' => ['nullable', 'max:1000'],
             'is_active' => ['required', 'boolean'],
-        ], [
-            'kode.regex' => 'Kode hanya boleh berisi huruf, angka, titik (.), strip (-), dan garis bawah (_).',
         ]);
 
         $jenisDokumen->update($validated);

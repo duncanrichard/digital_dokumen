@@ -14,6 +14,36 @@ use Illuminate\Support\Facades\Log;
 
 class DocumentDistributionController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (! $user) {
+                abort(401);
+            }
+
+            // ambil role dari relasi role() di model User
+            $role     = $user->role;
+            $roleName = $role->name ?? null;
+
+            // Superadmin bebas akses
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+            if ($isSuperadmin) {
+                return $next($request);
+            }
+
+            // Pakai role->hasPermissionTo, sama seperti di controller lain
+            $hasPermission = $role && $role->hasPermissionTo('documents.distribution.view');
+
+            if (! $hasPermission) {
+                abort(403, 'Anda tidak memiliki izin untuk mengakses halaman Distribusi Dokumen.');
+            }
+
+            return $next($request);
+        });
+    }
+
     public function index(Request $request)
     {
         $q          = trim((string) $request->query('q', ''));
@@ -103,7 +133,7 @@ class DocumentDistributionController extends Controller
         DB::transaction(function () use ($documentId, $deptIds) {
             DocumentDistribution::where('document_id', $documentId)->delete();
 
-            if (!empty($deptIds)) {
+            if (! empty($deptIds)) {
                 $now  = now();
                 $rows = [];
 
@@ -120,9 +150,9 @@ class DocumentDistributionController extends Controller
             }
         });
 
-        // ========================================
-        //        PENGIRIMAN NOTIFIKASI FONNTE
-        // ========================================
+        // =======================
+        //  Kirim notif Fonnte
+        // =======================
         try {
             $deptNames = Department::whereIn('id', $deptIds)
                 ->orderBy('name')
@@ -132,39 +162,34 @@ class DocumentDistributionController extends Controller
             $groupId = '120363404395085332@g.us';
             $token   = 'nbrnAs1M8J94FxwTTgo2';
 
-            // Format tanggal terbit (jika ada)
             $publishDate = $document->publish_date
                 ? $document->publish_date->format('d M Y')
                 : '-';
 
-            // Buat list bernomor untuk Divisi Tujuan
             $divisiList = "";
             foreach ($deptNames as $index => $name) {
                 $no = $index + 1;
                 $divisiList .= "   {$no}. {$name}\n";
             }
 
-            // ===== Pesan Corporate, Profesional + URL Sistem =====
-$message =
-    "*Pemberitahuan Distribusi Dokumen Resmi*\n\n" .
-    "Yth. Bapak/Ibu Rekan Kerja\n" .
-    "Dengan hormat,\n\n" .
-    "Sebagai bagian dari pengelolaan dan pengendalian dokumen perusahaan, bersama ini kami sampaikan bahwa telah diterbitkan dokumen baru dengan rincian sebagai berikut:\n\n" .
-    "• *Judul Dokumen*    : {$document->name}\n" .
-    "• *Nomor Dokumen*    : {$document->document_number}\n" .
-    "• *Tanggal Terbit*   : {$publishDate}\n" .
-    "• *Divisi Distribution*    :\n" .
-    $divisiList . "\n" .
-    "• *Diterbitkan oleh* : Legal\n\n" .
-    "Dokumen dimaksud dapat diakses melalui sistem *Document Control* pada tautan berikut:\n" .
-    "https://demo.dokumen.dsicorp.id/\n\n" .
-    "Dimohon kepada divisi yang terkait untuk segera meninjau, mendistribusikan, dan menindaklanjuti dokumen tersebut sesuai dengan tugas, kewenangan, dan prosedur yang berlaku di lingkungan perusahaan.\n\n" .
-    "Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja sama Bapak/Ibu, kami ucapkan terima kasih.\n\n" .
-    "Hormat kami,\n" .
-    "Divisi Legal\n" ;
+            $message =
+                "*Pemberitahuan Distribusi Dokumen Resmi*\n\n" .
+                "Yth. Bapak/Ibu Rekan Kerja\n" .
+                "Dengan hormat,\n\n" .
+                "Sebagai bagian dari pengelolaan dan pengendalian dokumen perusahaan, bersama ini kami sampaikan bahwa telah diterbitkan dokumen baru dengan rincian sebagai berikut:\n\n" .
+                "• *Judul Dokumen*    : {$document->name}\n" .
+                "• *Nomor Dokumen*    : {$document->document_number}\n" .
+                "• *Tanggal Terbit*   : {$publishDate}\n" .
+                "• *Divisi Distribution*    :\n" .
+                $divisiList . "\n" .
+                "• *Diterbitkan oleh* : Legal\n\n" .
+                "Dokumen dimaksud dapat diakses melalui sistem *Document Control* pada tautan berikut:\n" .
+                "https://demo.dokumen.dsicorp.id/\n\n" .
+                "Dimohon kepada divisi yang terkait untuk segera meninjau, mendistribusikan, dan menindaklanjuti dokumen tersebut sesuai dengan tugas, kewenangan, dan prosedur yang berlaku di lingkungan perusahaan.\n\n" .
+                "Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja sama Bapak/Ibu, kami ucapkan terima kasih.\n\n" .
+                "Hormat kami,\n" .
+                "Divisi Legal\n";
 
-
-            // bypass SSL only in local (Windows dev)
             $httpOptions = [];
             if (app()->environment('local')) {
                 $httpOptions['verify'] = false;

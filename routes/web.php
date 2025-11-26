@@ -19,6 +19,7 @@ use App\Http\Controllers\Documents\DocumentAccessApprovalController;
 // User Access
 use App\Http\Controllers\Access\UserController;
 use App\Http\Controllers\Access\RoleController;
+use App\Http\Controllers\Access\RolePermissionController; // <── Permission Settings
 
 // Settings
 use App\Http\Controllers\Settings\WatermarkController;
@@ -116,14 +117,12 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
             ->where('document', $DOC_ID_REGEX)
             ->name('open');
 
-        // GATE AKSES: cek approval & masa berlaku, lalu:
-        // - jika pending → tampil halaman info
-        // - jika approved → tampil halaman yang buka tab baru + timer
+        // GATE AKSES: cek approval & masa berlaku
         Route::get('/{document}/file', [DocumentUploadController::class, 'stream'])
             ->where('document', $DOC_ID_REGEX)
             ->name('file');
 
-        // RAW FILE PDF: benar-benar mengeluarkan file (dipanggil dari tab baru)
+        // RAW FILE PDF
         Route::get('/{document}/file/raw', [DocumentUploadController::class, 'rawFile'])
             ->where('document', $DOC_ID_REGEX)
             ->name('file.raw');
@@ -184,6 +183,10 @@ Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
     |--------------------------------------------------------------------------
     */
     Route::prefix('access')->name('access.')->group(function () use ($UUID_REGEX) {
+
+        // Permission Settings (Role-Permission Matrix)
+        Route::get('/permissions',  [RolePermissionController::class, 'index'])->name('permissions.index');
+        Route::post('/permissions', [RolePermissionController::class, 'update'])->name('permissions.update');
 
         // Users
         Route::prefix('users')->name('users.')->group(function () use ($UUID_REGEX) {

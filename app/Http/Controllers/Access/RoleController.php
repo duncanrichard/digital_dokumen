@@ -8,21 +8,56 @@ use Illuminate\Http\Request;
 
 class RoleController extends Controller
 {
+    public function __construct()
+    {
+        // Middleware permission per method
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (! $user) {
+                abort(401);
+            }
+
+            $roleName     = optional($user->role)->name;
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+            // Superadmin bebas
+            if ($isSuperadmin) {
+                return $next($request);
+            }
+
+            $method = $request->route()->getActionMethod();
+
+            $requiredPermission = match ($method) {
+                'index'  => 'access.roles.view',
+                'store'  => 'access.roles.create',
+                'update' => 'access.roles.update',
+                'destroy'=> 'access.roles.delete',
+                default  => 'access.roles.view',
+            };
+
+            if (! $user->role || ! $user->role->hasPermissionTo($requiredPermission)) {
+                abort(403, 'Anda tidak memiliki izin untuk mengakses fitur ini.');
+            }
+
+            return $next($request);
+        });
+    }
+
     /**
      * Tampilkan daftar role.
      */
- public function index(Request $request)
-{
-    $roles = Role::orderBy('name')->paginate(10);
+    public function index(Request $request)
+    {
+        $roles = Role::orderBy('name')->paginate(10);
 
-    $editRole = null;
-    if ($request->filled('edit')) {
-        $editRole = Role::findOrFail($request->input('edit'));
+        $editRole = null;
+        if ($request->filled('edit')) {
+            $editRole = Role::findOrFail($request->input('edit'));
+        }
+
+        return view('access.roles.index', compact('roles', 'editRole'));
     }
-
-    return view('access.roles.index', compact('roles', 'editRole'));
-}
-
 
     /**
      * Simpan role baru.
@@ -40,7 +75,9 @@ class RoleController extends Controller
 
         Role::create($validated);
 
-        return redirect()->back()->with('success', 'Role berhasil ditambahkan.');
+        return redirect()
+            ->route('access.roles.index')
+            ->with('success', 'Role berhasil ditambahkan.');
     }
 
     /**
@@ -59,7 +96,9 @@ class RoleController extends Controller
 
         $role->update($validated);
 
-        return redirect()->back()->with('success', 'Role berhasil diperbarui.');
+        return redirect()
+            ->route('access.roles.index', ['edit' => $role->id])
+            ->with('success', 'Role berhasil diperbarui.');
     }
 
     /**
@@ -67,8 +106,17 @@ class RoleController extends Controller
      */
     public function destroy(Role $role)
     {
+        // opsional: cegah hapus Superadmin
+        if (strcasecmp($role->name, 'Superadmin') === 0) {
+            return redirect()
+                ->route('access.roles.index')
+                ->with('success', 'Role "Superadmin" tidak boleh dihapus.');
+        }
+
         $role->delete();
 
-        return redirect()->back()->with('success', 'Role berhasil dihapus.');
+        return redirect()
+            ->route('access.roles.index')
+            ->with('success', 'Role berhasil dihapus.');
     }
 }

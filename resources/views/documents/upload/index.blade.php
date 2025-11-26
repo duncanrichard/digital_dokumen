@@ -49,6 +49,20 @@
 @endpush
 
 @section('content')
+@php
+  $me       = auth()->user();
+  $role     = optional($me)->role; // relasi role() di model User
+  $roleName = $role->name ?? null;
+
+  // Superadmin (bypass semua)
+  $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+  // Permission berdasarkan ROLE (bukan $user->can())
+  $canCreate = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.create'));
+  $canUpdate = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.update'));
+  $canDelete = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.delete'));
+@endphp
+
 <div class="row gy-4">
   <div class="col-12">
 
@@ -76,9 +90,12 @@
             <p class="text-muted mb-0 small">Managed controlled documents & company assets</p>
           </div>
 
-          <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal" id="btnOpenCreate">
-            <i class="mdi mdi-plus me-1"></i> Add Document
-          </button>
+          @if($canCreate)
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal" id="btnOpenCreate">
+              <i class="mdi mdi-plus me-1"></i> Add Document
+            </button>
+          @endif
+
         </div>
 
         {{-- Filters --}}
@@ -189,7 +206,9 @@
                             <th class="text-center">Publish Date</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">File</th>
-                            <th class="col-aksi text-center">Actions</th>
+                            @if($canUpdate || $canDelete)
+                              <th class="col-aksi text-center">Actions</th>
+                            @endif
                           </tr>
                         </thead>
                         <tbody>
@@ -233,14 +252,14 @@
 
                               <td class="text-center">
                                 <div class="btn-group btn-group-sm" role="group">
-                                  {{-- VIEW -> ke gate stream() (tidak buka tab baru di sini) --}}
+                                  {{-- VIEW -> ke gate stream() --}}
                                   <a href="{{ route('documents.file', $row->id) }}"
                                      class="btn btn-outline-primary btn-action"
                                      title="View">
                                     <i class="mdi mdi-eye"></i>
                                   </a>
 
-                                  {{-- DOWNLOAD -> langsung ke rawFile, gunakan dl=1 untuk attachment --}}
+                                  {{-- DOWNLOAD -> langsung ke rawFile, gunakan dl=1 --}}
                                   <a href="{{ route('documents.file.raw', [$row->id, 'dl' => 1]) }}"
                                      class="btn btn-outline-secondary btn-action"
                                      title="Download">
@@ -249,35 +268,47 @@
                                 </div>
                               </td>
 
-                              <td class="text-center">
-                                <div class="dropdown">
-                                  <button type="button" class="btn btn-sm btn-text-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="mdi mdi-dots-vertical"></i>
-                                  </button>
-                                  <ul class="dropdown-menu">
-                                    <li>
-                                      <a href="javascript:void(0);" class="dropdown-item btn-edit-document"
-                                         data-update-url="{{ route('documents.update', $row->id) }}"
-                                         data-id="{{ $row->id }}"
-                                         data-document_type_id="{{ $row->jenis_dokumen_id }}"
-                                         data-department_id="{{ $row->department_id }}"
-                                         data-name="{{ $row->name }}"
-                                         data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
-                                         data-is_active="{{ $row->is_active ? 1 : 0 }}"
-                                         data-bs-toggle="modal" data-bs-target="#editModal">
-                                        <i class="mdi mdi-pencil-outline me-2"></i> Edit
-                                      </a>
-                                    </li>
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li>
-                                      <a href="#" class="dropdown-item text-danger btn-delete-document"
-                                         data-delete-url="{{ route('documents.destroy', $row->id) }}">
-                                        <i class="mdi mdi-trash-can-outline me-2"></i> Delete
-                                      </a>
-                                    </li>
-                                  </ul>
-                                </div>
-                              </td>
+                              @if($canUpdate || $canDelete)
+                                <td class="text-center">
+                                  <div class="dropdown">
+                                    <button type="button" class="btn btn-sm btn-text-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                      <i class="mdi mdi-dots-vertical"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+
+                                      @if($canUpdate)
+                                        <li>
+                                          <a href="javascript:void(0);" class="dropdown-item btn-edit-document"
+                                             data-update-url="{{ route('documents.update', $row->id) }}"
+                                             data-id="{{ $row->id }}"
+                                             data-document_type_id="{{ $row->jenis_dokumen_id }}"
+                                             data-department_id="{{ $row->department_id }}"
+                                             data-name="{{ $row->name }}"
+                                             data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
+                                             data-is_active="{{ $row->is_active ? 1 : 0 }}"
+                                             data-bs-toggle="modal" data-bs-target="#editModal">
+                                            <i class="mdi mdi-pencil-outline me-2"></i> Edit
+                                          </a>
+                                        </li>
+                                      @endif
+
+                                      @if($canUpdate && $canDelete)
+                                        <li><hr class="dropdown-divider"></li>
+                                      @endif
+
+                                      @if($canDelete)
+                                        <li>
+                                          <a href="#" class="dropdown-item text-danger btn-delete-document"
+                                             data-delete-url="{{ route('documents.destroy', $row->id) }}">
+                                            <i class="mdi mdi-trash-can-outline me-2"></i> Delete
+                                          </a>
+                                        </li>
+                                      @endif
+
+                                    </ul>
+                                  </div>
+                                </td>
+                              @endif
                             </tr>
                           @endforeach
                         </tbody>
@@ -308,6 +339,7 @@
 </div>
 
 {{-- ================== CREATE MODAL (Hanya untuk dokumen baru) ================== --}}
+@if($canCreate)
 <div class="modal fade" id="createModal" tabindex="-1" aria-labelledby="createModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content shadow-lg rounded-3">
@@ -410,8 +442,10 @@
     </div>
   </div>
 </div>
+@endif
 
 {{-- ================== EDIT MODAL ================== --}}
+@if($canUpdate)
 <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content shadow-lg rounded-3">
@@ -497,11 +531,14 @@
     </div>
   </div>
 </div>
+@endif
 
 {{-- FORM DELETE tersembunyi --}}
+@if($canDelete)
 <form id="formDeleteDocument" method="POST" class="d-none">
   @csrf @method('DELETE')
 </form>
+@endif
 @endsection
 
 {{-- Select2 scripts --}}
@@ -531,7 +568,17 @@
     }
 
     $(document).ready(function () {
+      // Init awal (filter di card + field di modal yg sudah ada di DOM)
       initSelect2();
+
+      // Init ulang Select2 setiap modal dibuka (agar width & dropdownParent rapi)
+      $('#createModal').on('shown.bs.modal', function () {
+        initSelect2(this);
+      });
+
+      $('#editModal').on('shown.bs.modal', function () {
+        initSelect2(this);
+      });
 
       // Auto-open CREATE modal if validation fails (mode create only)
       @if ($errors->any() && old('_from')==='create')
@@ -548,6 +595,7 @@
         e.preventDefault();
         const btn = $(this);
         const form = document.getElementById('formEdit');
+        if (!form) return;
         form.action = btn.data('update-url') || '#';
         document.getElementById('edit_id').value = btn.data('id') || '';
 
@@ -561,16 +609,21 @@
         $('#edit_document_type_id').val(btn.data('document_type_id') || '').trigger('change');
         $('#edit_department_id').val(btn.data('department_id') || '').trigger('change');
 
-        document.getElementById('edit_is_active').checked =
-          (btn.data('is_active') === 1 || btn.data('is_active') === '1');
+        const isActive = btn.data('is_active');
+        const chk = document.getElementById('edit_is_active');
+        if (chk) chk.checked = (isActive === 1 || isActive === '1');
 
         const modal = document.getElementById('editModal');
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
         setTimeout(() => { initSelect2(modal); }, 100);
       });
 
       // Add new (reset form)
       $('#btnOpenCreate').on('click', function() {
-        document.getElementById('formCreate').reset();
+        const form = document.getElementById('formCreate');
+        if (!form) return;
+        form.reset();
         $('#create_document_type_id').val('').trigger('change');
         $('#create_department_id').val('').trigger('change');
       });
@@ -590,6 +643,7 @@
         e.preventDefault();
         if (!confirm('Delete this document? This action cannot be undone.')) return;
         const form = document.getElementById('formDeleteDocument');
+        if (!form) return;
         form.action = $(this).data('delete-url') || '#';
         form.submit();
       });

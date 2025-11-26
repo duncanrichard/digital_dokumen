@@ -9,6 +9,37 @@ use Illuminate\Support\Facades\Auth;
 
 class DocumentAccessApprovalController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (! $user) {
+                abort(401);
+            }
+
+            // ambil role dari relasi role() di model User
+            $role     = $user->role;
+            $roleName = $role->name ?? null;
+
+            // Superadmin bebas akses
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+            if ($isSuperadmin) {
+                return $next($request);
+            }
+
+            // cek permission pada ROLE (bukan $user->can)
+            // nama permission HARUS sama dengan di seeder
+            $hasPermission = $role && $role->hasPermissionTo('documents.access-approvals.view');
+
+            if (! $hasPermission) {
+                abort(403, 'Anda tidak memiliki izin untuk mengakses halaman Persetujuan Akses Dokumen.');
+            }
+
+            return $next($request);
+        });
+    }
+
     public function index(Request $request)
     {
         $status = $request->get('status'); // optional filter: pending/approved/rejected

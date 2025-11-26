@@ -6,9 +6,11 @@
       "icon": "menu-icon tf-icons mdi mdi-home-outline",
       "slug": "dashboard",
       "submenu": [
-        {  "url": "/",
+        {
+          "url": "/",
           "name": "Analytics",
-          "slug": "dashboard-analytics" }
+          "slug": "dashboard-analytics"
+        }
       ]
     },
 
@@ -32,7 +34,7 @@
       "slug": "master-data",
       "submenu": [
         { "url": "/master/jenis-dokumen", "name": "Document Types",      "slug": "master-jenis-dokumen" },
-        { "url": "/master/departments",   "name": "Divisi",         "slug": "master-departments" },
+        { "url": "/master/departments",   "name": "Divisi",              "slug": "master-departments" },
         { "url": "/master/tags",          "name": "Tags & Keywords",     "slug": "master-tags" },
         { "url": "/master/locations",     "name": "Physical Locations",  "slug": "master-locations" }
       ]
@@ -44,9 +46,10 @@
       "icon": "menu-icon tf-icons mdi mdi-account-lock-outline",
       "slug": "user-access",
       "submenu": [
-        { "url": "/access/users", "name": "Users", "slug": "access-users" },
-        { "url": "/access/roles", "name": "Roles", "slug": "access-roles" },
-        { "url": "/access/rules", "name": "Rules", "slug": "access-rules" }
+        { "url": "/access/users",       "name": "Users",               "slug": "access-users" },
+        { "url": "/access/roles",       "name": "Roles",               "slug": "access-roles" },
+
+        { "url": "/access/permissions", "name": "Permission Settings", "slug": "access-permissions" }
       ]
     },
 
@@ -56,9 +59,9 @@
       "icon": "menu-icon tf-icons mdi mdi-cog-outline",
       "slug": "settings",
       "submenu": [
-        { "url": "/settings/watermark",     "name": "Watermark/DRM",   "slug": "settings-watermark" },
-        { "url": "/system/framework",       "name": "Framework System","slug": "system-framework" },
-        { "url": "/settings/document-access","name": "Document Access", "slug": "settings-document-access" }
+        { "url": "/settings/watermark",      "name": "Watermark/DRM",    "slug": "settings-watermark" },
+        { "url": "/system/framework",        "name": "Framework System", "slug": "system-framework" },
+        { "url": "/settings/document-access","name": "Document Access",  "slug": "settings-document-access" }
       ]
     }
   ]

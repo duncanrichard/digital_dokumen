@@ -18,6 +18,22 @@
 @endpush
 
 @section('content')
+@php
+  $me       = auth()->user();
+  $role     = optional($me)->role;
+  $roleName = $role->name ?? null;
+
+  // Superadmin bebas
+  $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+  $canCreate = $isSuperadmin || ($role && $role->hasPermissionTo('access.roles.create'));
+  $canUpdate = $isSuperadmin || ($role && $role->hasPermissionTo('access.roles.update'));
+  $canDelete = $isSuperadmin || ($role && $role->hasPermissionTo('access.roles.delete'));
+
+  $isEdit    = isset($editRole);
+  $formTitle = $isEdit ? 'Edit Role' : 'Tambah Role';
+@endphp
+
 <div class="container-xxl flex-grow-1 container-p-y">
 
   <h4 class="fw-bold py-3 mb-4">
@@ -43,11 +59,6 @@
     </div>
   @endif
 
-  @php
-    $isEdit    = isset($editRole);
-    $formTitle = $isEdit ? 'Edit Role' : 'Tambah Role';
-  @endphp
-
   <div class="row">
 
     {{-- ========== KOLOM KIRI: FORM ========== --}}
@@ -58,52 +69,58 @@
         </div>
 
         <div class="card-body">
-          <form action="{{ $isEdit
-                            ? route('access.roles.update', $editRole->id)
-                            : route('access.roles.store') }}"
-                method="POST">
+          @if(($isEdit && $canUpdate) || (!$isEdit && $canCreate))
+            <form action="{{ $isEdit
+                              ? route('access.roles.update', $editRole->id)
+                              : route('access.roles.store') }}"
+                  method="POST">
 
-            @csrf
-            @if ($isEdit)
-              @method('PUT')
-            @endif
-
-            <div class="mb-3">
-              <label for="name" class="form-label">Nama Role</label>
-              <input
-                type="text"
-                class="form-control"
-                id="name"
-                name="name"
-                value="{{ old('name', $isEdit ? $editRole->name : '') }}"
-                required
-              >
-            </div>
-
-            <div class="mb-3">
-              <label for="guard_name" class="form-label">Guard Name</label>
-              <input
-                type="text"
-                class="form-control"
-                id="guard_name"
-                name="guard_name"
-                value="{{ old('guard_name', $isEdit ? $editRole->guard_name : 'web') }}"
-                readonly
-              >
-            </div>
-
-            <div class="d-flex gap-2">
-              <button type="submit" class="btn btn-primary">
-                {{ $isEdit ? 'Update' : 'Simpan' }}
-              </button>
-
+              @csrf
               @if ($isEdit)
-                <a href="{{ route('access.roles.index') }}" class="btn btn-outline-secondary">
-                  Batal
-                </a>
+                @method('PUT')
               @endif
+
+              <div class="mb-3">
+                <label for="name" class="form-label">Nama Role</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="name"
+                  name="name"
+                  value="{{ old('name', $isEdit ? $editRole->name : '') }}"
+                  required
+                >
+              </div>
+
+              <div class="mb-3">
+                <label for="guard_name" class="form-label">Guard Name</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="guard_name"
+                  name="guard_name"
+                  value="{{ old('guard_name', $isEdit ? $editRole->guard_name : 'web') }}"
+                  readonly
+                >
+              </div>
+
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                  {{ $isEdit ? 'Update' : 'Simpan' }}
+                </button>
+
+                @if ($isEdit)
+                  <a href="{{ route('access.roles.index') }}" class="btn btn-outline-secondary">
+                    Batal
+                  </a>
+                @endif
+              </div>
+            </form>
+          @else
+            <div class="alert alert-warning mb-0">
+              Anda tidak memiliki izin untuk {{ $isEdit ? 'mengubah' : 'membuat' }} role.
             </div>
-          </form>
+          @endif
         </div>
       </div>
     </div>
@@ -128,35 +145,39 @@
               </tr>
             </thead>
             <tbody>
-              @forelse ($roles as $index => $role)
+              @forelse ($roles as $index => $roleItem)
                 <tr>
                   <td class="text-muted col-idx">{{ $roles->firstItem() + $index }}</td>
-                  <td>{{ $role->name }}</td>
-                  <td class="text-muted">{{ $role->guard_name }}</td>
-                  <td class="text-muted small">{{ $role->created_at?->format('d-m-Y H:i') }}</td>
-                  <td class="text-muted small">{{ $role->updated_at?->format('d-m-Y H:i') }}</td>
+                  <td>{{ $roleItem->name }}</td>
+                  <td class="text-muted">{{ $roleItem->guard_name }}</td>
+                  <td class="text-muted small">{{ $roleItem->created_at?->format('d-m-Y H:i') }}</td>
+                  <td class="text-muted small">{{ $roleItem->updated_at?->format('d-m-Y H:i') }}</td>
                   <td class="col-aksi">
                     <div class="d-flex justify-content-center gap-2">
-                      {{-- Edit: kirim query ?edit= --}}
-                      <a href="{{ route('access.roles.index', array_merge(request()->except('page','edit'), ['edit' => $role->id])) }}"
-                         class="btn btn-sm btn-outline-primary btn-icon"
-                         title="Edit">
-                        <i class="mdi mdi-pencil-outline"></i>
-                      </a>
+                      @if($canUpdate)
+                        {{-- Edit: kirim query ?edit= --}}
+                        <a href="{{ route('access.roles.index', array_merge(request()->except('page','edit'), ['edit' => $roleItem->id])) }}"
+                           class="btn btn-sm btn-outline-primary btn-icon"
+                           title="Edit">
+                          <i class="mdi mdi-pencil-outline"></i>
+                        </a>
+                      @endif
 
-                      {{-- Delete --}}
-                      <form action="{{ route('access.roles.destroy', $role->id) }}"
-                            method="POST"
-                            class="d-inline"
-                            onsubmit="return confirm('Hapus role ini?');">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit"
-                                class="btn btn-sm btn-outline-danger btn-icon"
-                                title="Hapus">
-                          <i class="mdi mdi-trash-can-outline"></i>
-                        </button>
-                      </form>
+                      @if($canDelete && strcasecmp($roleItem->name, 'Superadmin') !== 0)
+                        {{-- Delete (jangan izinkan hapus Superadmin) --}}
+                        <form action="{{ route('access.roles.destroy', $roleItem->id) }}"
+                              method="POST"
+                              class="d-inline"
+                              onsubmit="return confirm('Hapus role ini?');">
+                          @csrf
+                          @method('DELETE')
+                          <button type="submit"
+                                  class="btn btn-sm btn-outline-danger btn-icon"
+                                  title="Hapus">
+                            <i class="mdi mdi-trash-can-outline"></i>
+                          </button>
+                        </form>
+                      @endif
                     </div>
                   </td>
                 </tr>

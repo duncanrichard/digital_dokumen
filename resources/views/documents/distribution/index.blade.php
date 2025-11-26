@@ -10,21 +10,21 @@
 
 @push('styles')
 <style>
-  .select2-container { 
-    width: 100% !important; 
+  .select2-container {
+    width: 100% !important;
   }
-  
+
   .document-card {
     transition: all 0.3s ease;
     border: none;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   }
-  
+
   .document-card:hover {
     box-shadow: 0 4px 16px rgba(0,0,0,0.12);
     transform: translateY(-2px);
   }
-  
+
   .header-gradient {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -32,13 +32,13 @@
     padding: 2rem;
     margin-bottom: 2rem;
   }
-  
+
   .search-box {
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
   }
-  
+
   .dept-card {
     border: 2px solid #e9ecef;
     border-radius: 8px;
@@ -46,30 +46,30 @@
     background: white;
     height: 100%;
   }
-  
+
   .dept-card:hover {
     border-color: #667eea;
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
     transform: translateY(-2px);
   }
-  
+
   .dept-card.selected {
     border-color: #667eea;
     background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
   }
-  
+
   .dept-card .form-check-input:checked {
     background-color: #667eea;
     border-color: #667eea;
   }
-  
+
   .info-card {
     background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
     border: none;
     border-left: 4px solid #667eea;
     border-radius: 8px;
   }
-  
+
   .stat-card {
     background: white;
     border-radius: 12px;
@@ -78,12 +78,12 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     transition: all 0.3s ease;
   }
-  
+
   .stat-card:hover {
     transform: translateY(-4px);
     box-shadow: 0 6px 20px rgba(0,0,0,0.12);
   }
-  
+
   .stat-icon {
     width: 56px;
     height: 56px;
@@ -94,7 +94,7 @@
     font-size: 1.75rem;
     margin-bottom: 0.75rem;
   }
-  
+
   .action-btn {
     padding: 0.75rem 2rem;
     border-radius: 8px;
@@ -103,12 +103,12 @@
     letter-spacing: 0.5px;
     transition: all 0.3s ease;
   }
-  
+
   .action-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   }
-  
+
   .section-title {
     font-size: 1.1rem;
     font-weight: 600;
@@ -118,24 +118,24 @@
     border-bottom: 2px solid #667eea;
     display: inline-block;
   }
-  
+
   .empty-state {
     text-align: center;
     padding: 3rem 2rem;
     color: #6c757d;
   }
-  
+
   .empty-state-icon {
     font-size: 4rem;
     color: #dee2e6;
     margin-bottom: 1rem;
   }
-  
+
   @media (max-width: 768px) {
     .header-gradient {
       padding: 1.5rem;
     }
-    
+
     .stat-card {
       margin-bottom: 1rem;
     }
@@ -145,7 +145,7 @@
 
 @section('content')
 <div class="container-xxl flex-grow-1 container-p-y">
-  
+
   {{-- Header Section --}}
   <div class="header-gradient">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
@@ -158,7 +158,10 @@
       </div>
       <div class="search-box p-2">
         <form method="GET" action="{{ route('documents.distribution.index') }}" class="d-flex gap-2">
-          <input type="text" name="q" value="{{ $q }}" class="form-control border-0"
+          <input type="text"
+                 name="q"
+                 value="{{ $q }}"
+                 class="form-control border-0"
                  placeholder="Search document number or name..."
                  style="min-width: 280px;">
           <button class="btn btn-primary" title="Search documents">
@@ -178,7 +181,7 @@
 
   {{-- Flash Messages --}}
   @if(session('success'))
-    <div class="alert alert-success alert-dismissible fade show shadow-sm border-0">
+    <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 mt-3">
       <div class="d-flex align-items-center">
         <i class="mdi mdi-check-circle-outline me-2" style="font-size: 1.5rem;"></i>
         <div>{{ session('success') }}</div>
@@ -186,15 +189,17 @@
       <button class="btn-close" data-bs-dismiss="alert"></button>
     </div>
   @endif
-  
+
   @if($errors->any())
-    <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0">
+    <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 mt-3">
       <div class="d-flex align-items-start">
         <i class="mdi mdi-alert-circle-outline me-2 mt-1" style="font-size: 1.5rem;"></i>
         <div>
           <strong>Please check your form again.</strong>
           <ul class="mb-0 mt-2 ps-3">
-            @foreach($errors->all() as $err)<li>{{ $err }}</li>@endforeach
+            @foreach($errors->all() as $err)
+              <li>{{ $err }}</li>
+            @endforeach
           </ul>
         </div>
       </div>
@@ -203,33 +208,37 @@
   @endif
 
   {{-- Main Card --}}
-  <div class="card document-card">
+  <div class="card document-card mt-3">
     <div class="card-body p-4">
-      
+
       {{-- Document Selection --}}
       <div class="mb-4">
         <h5 class="section-title">
           <i class="mdi mdi-file-search-outline me-2"></i>
           Select Document
         </h5>
-        
+
         <form method="GET" action="{{ route('documents.distribution.index') }}" id="formPickDoc">
           <div class="row align-items-end">
             <div class="col-lg-10">
               <label class="form-label fw-semibold">Choose Document</label>
-              <select class="form-select select2" name="document_id" id="selectDocument"
+              <select class="form-select select2"
+                      name="document_id"
+                      id="selectDocument"
                       data-placeholder="Select a document..."
                       style="min-width: 280px">
                 <option value=""></option>
                 @foreach($documents as $d)
-                  <option value="{{ $d->id }}" @selected($documentId===$d->id)>
+                  <option value="{{ $d->id }}" @selected($documentId === $d->id)>
                     {{ $d->document_number ?? '-' }} — {{ $d->name }}
-                    @if(!is_null($d->revision)) (Rev {{ $d->revision }}) @endif
+                    @if(!is_null($d->revision))
+                      (Rev {{ $d->revision }})
+                    @endif
                   </option>
                 @endforeach
               </select>
             </div>
-            
+
             @if($documentId)
               <div class="col-lg-2 mt-3 mt-lg-0">
                 <a href="{{ route('documents.distribution.index') }}"
@@ -243,7 +252,7 @@
         </form>
       </div>
 
-      @if(!$selectedDoc)
+      @if(! $selectedDoc)
         {{-- Empty State --}}
         <div class="empty-state">
           <div class="empty-state-icon">
@@ -266,9 +275,13 @@
               </div>
               <div class="small text-muted">
                 <i class="mdi mdi-calendar-outline me-1"></i>
-                Published: {{ optional($selectedDoc->publish_date)->format('d M Y') ?? '-' }}
+                Published:
+                {{ optional($selectedDoc->publish_date)->format('d M Y') ?? '-' }}
                 <span class="mx-2">•</span>
-                Status: {!! $selectedDoc->is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-danger">Inactive</span>' !!}
+                Status:
+                {!! $selectedDoc->is_active
+                     ? '<span class="badge bg-success">Active</span>'
+                     : '<span class="badge bg-danger">Inactive</span>' !!}
                 @if(!is_null($selectedDoc->revision))
                   <span class="mx-2">•</span> Revision {{ $selectedDoc->revision }}
                 @endif
@@ -296,16 +309,29 @@
                 <i class="mdi mdi-office-building-outline me-2"></i>
                 Select Recipient Divisions
               </h5>
-              
+
               <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="checkAllDeps" style="cursor: pointer;">
-                <label class="form-check-label fw-semibold" for="checkAllDeps" style="cursor: pointer;">
+                <input class="form-check-input"
+                       type="checkbox"
+                       id="checkAllDeps"
+                       style="cursor: pointer;">
+                <label class="form-check-label fw-semibold"
+                       for="checkAllDeps"
+                       style="cursor: pointer;">
                   Select All Divisions (except main)
                 </label>
               </div>
             </div>
 
             {{-- Statistics Row --}}
+            @php
+              $baseSelected = count($selectedDepartments);
+              $primaryId    = $selectedDoc->department_id ?? null;
+              if ($primaryId && ! in_array($primaryId, $selectedDepartments)) {
+                  $baseSelected++;
+              }
+            @endphp
+
             <div class="row mb-4">
               <div class="col-md-4">
                 <div class="stat-card">
@@ -323,14 +349,6 @@
                   </div>
                   <div class="text-muted small text-uppercase">Selected</div>
                   <div class="h3 fw-bold text-success mb-0" id="selectedCount">
-                    {{-- hitung +1 kalau primary tidak ada di $selectedDepartments --}}
-                    @php
-                      $baseSelected = count($selectedDepartments);
-                      $primaryId    = $selectedDoc->department_id ?? null;
-                      if ($primaryId && !in_array($primaryId, $selectedDepartments)) {
-                          $baseSelected++;
-                      }
-                    @endphp
                     {{ $baseSelected }}
                   </div>
                 </div>
@@ -355,6 +373,7 @@
                   $isPrimary = $selectedDoc && $selectedDoc->department_id === $dep->id;
                   $isChecked = $isPrimary || in_array($dep->id, $selectedDepartments);
                 @endphp
+
                 <div class="col-md-6 col-lg-4 col-xl-3">
                   <div class="dept-card p-3 {{ $isChecked ? 'selected' : '' }}" data-dept-id="{{ $dep->id }}">
                     <div class="form-check mb-0">
@@ -367,12 +386,15 @@
                              @if($isPrimary) disabled @endif
                              data-primary="{{ $isPrimary ? '1' : '0' }}"
                              style="cursor: pointer;">
+
                       {{-- hidden agar divisi utama tetap terkirim walaupun checkbox disabled --}}
                       @if($isPrimary)
                         <input type="hidden" name="department_id[]" value="{{ $dep->id }}">
                       @endif
 
-                      <label class="form-check-label w-100" for="dep_{{ $dep->id }}" style="cursor: pointer;">
+                      <label class="form-check-label w-100"
+                             for="dep_{{ $dep->id }}"
+                             style="cursor: pointer;">
                         <div class="d-flex align-items-center justify-content-between">
                           <div>
                             <div class="fw-semibold">{{ $dep->name }}</div>
@@ -424,12 +446,13 @@
                 Main division of the document is always included and cannot be unselected.
               </div>
               <div class="d-flex gap-2">
-                <a href="{{ route('documents.distribution.index', ['document_id'=>$selectedDoc->id]) }}"
+                <a href="{{ route('documents.distribution.index', ['document_id' => $selectedDoc->id]) }}"
                    class="btn btn-outline-secondary action-btn"
                    title="Reset distribution settings">
                   <i class="mdi mdi-refresh me-1"></i> Reset
                 </a>
-                <button type="submit" class="btn btn-primary action-btn"
+                <button type="submit"
+                        class="btn btn-primary action-btn"
                         title="Save distribution settings">
                   <i class="mdi mdi-content-save-outline me-1"></i> Save Distribution
                 </button>
@@ -481,7 +504,7 @@
 
       const selectedCountEl   = document.getElementById('selectedCount');
       const unselectedCountEl = document.getElementById('unselectedCount');
-      
+
       if (selectedCountEl) selectedCountEl.textContent = checked;
       if (unselectedCountEl) unselectedCountEl.textContent = unchecked;
 
@@ -489,7 +512,7 @@
       depBoxes.forEach(cb => {
         const card  = cb.closest('.dept-card');
         const badge = card.querySelector('.badge');
-        
+
         if (cb.checked) {
           card.classList.add('selected');
           if (badge) {
@@ -519,21 +542,21 @@
         const checked = normalBoxes.filter(cb => cb.checked).length;
 
         if (total === 0) {
-          master.checked      = true;
+          master.checked       = true;
           master.indeterminate = false;
-          master.disabled     = true;
+          master.disabled      = true;
         } else if (checked === 0) {
-          master.checked      = false;
+          master.checked       = false;
           master.indeterminate = false;
-          master.disabled     = false;
+          master.disabled      = false;
         } else if (checked === total) {
-          master.checked      = true;
+          master.checked       = true;
           master.indeterminate = false;
-          master.disabled     = false;
+          master.disabled      = false;
         } else {
-          master.checked      = false;
+          master.checked       = false;
           master.indeterminate = true;
-          master.disabled     = false;
+          master.disabled      = false;
         }
 
         updateCounters();

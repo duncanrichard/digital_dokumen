@@ -41,6 +41,18 @@
 @endpush
 
 @section('content')
+@php
+  $me       = auth()->user();
+  $role     = optional($me)->role;
+  $roleName = $role->name ?? null;
+
+  $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+  $canCreate = $isSuperadmin || ($role && $role->hasPermissionTo('access.users.create'));
+  $canUpdate = $isSuperadmin || ($role && $role->hasPermissionTo('access.users.update'));
+  $canDelete = $isSuperadmin || ($role && $role->hasPermissionTo('access.users.delete'));
+@endphp
+
 <div class="row gy-4">
   <div class="col-12">
 
@@ -129,7 +141,6 @@
             $isEdit     = isset($editUser);
             $formTitle  = $isEdit ? 'Edit User' : 'Add New User';
             $isHrisEdit = $isEdit && !empty($editUser->hris_employee_id ?? null);
-            // password wajib hanya pada CREATE + non-HRIS
             $passwordRequired = !$isEdit && !$isHrisEdit;
           @endphp
 
@@ -139,216 +150,217 @@
                 <h5 class="mb-0">{{ $formTitle }}</h5>
               </div>
               <div class="card-body">
-                <form method="post"
-                      action="{{ $isEdit
-                                ? route('access.users.update', $editUser->id)
-                                : route('access.users.store') }}">
-                  @csrf
-                  @if($isEdit)
-                    @method('PUT')
-                  @endif
-
-                  {{-- HRIS EMPLOYEE (OPSIONAL) --}}
-                  <div class="mb-3">
-                    <label class="form-label">HRIS Employee (optional)</label>
-                    <select name="hris_employee_id"
-                            id="hris_employee_id"
-                            class="form-select select2 @error('hris_employee_id') is-invalid @enderror"
-                            data-placeholder="Select employee from HRIS"
-                            @if($isHrisEdit) disabled @endif>
-                      <option value=""></option>
-                      @foreach($employees as $emp)
-                        <option value="{{ $emp->id }}"
-                                data-name="{{ $emp->name }}"
-                                data-email="{{ $emp->email }}"
-                                data-wa="{{ $emp->office_phone }}"
-                          {{ (string) old('hris_employee_id', $isEdit ? $editUser->hris_employee_id : '') === (string) $emp->id ? 'selected' : '' }}>
-                          {{ $emp->name }} @if($emp->email) ({{ $emp->email }}) @endif
-                        </option>
-                      @endforeach
-                    </select>
-                    {{-- kalau edit HRIS, kirim hidden agar value tetap terkirim walau select disabled --}}
-                    @if($isHrisEdit)
-                      <input type="hidden" name="hris_employee_id" value="{{ $editUser->hris_employee_id }}">
+                @if(($isEdit && $canUpdate) || (!$isEdit && $canCreate))
+                  <form method="post"
+                        action="{{ $isEdit
+                                  ? route('access.users.update', $editUser->id)
+                                  : route('access.users.store') }}">
+                    @csrf
+                    @if($isEdit)
+                      @method('PUT')
                     @endif
 
-                    @error('hris_employee_id')
-                      <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                    <small class="text-muted d-block mt-1">
-                      Jika dipilih: <strong>Name</strong>, <strong>Username</strong>, dan <strong>Email</strong> akan mengikuti data HRIS.
-                    </small>
-                  </div>
+                    {{-- HRIS EMPLOYEE (OPSIONAL) --}}
+                    <div class="mb-3">
+                      <label class="form-label">HRIS Employee (optional)</label>
+                      <select name="hris_employee_id"
+                              id="hris_employee_id"
+                              class="form-select select2 @error('hris_employee_id') is-invalid @enderror"
+                              data-placeholder="Select employee from HRIS"
+                              @if($isHrisEdit) disabled @endif>
+                        <option value=""></option>
+                        @foreach($employees as $emp)
+                          <option value="{{ $emp->id }}"
+                                  data-name="{{ $emp->name }}"
+                                  data-email="{{ $emp->email }}"
+                                  data-wa="{{ $emp->office_phone }}"
+                            {{ (string) old('hris_employee_id', $isEdit ? $editUser->hris_employee_id : '') === (string) $emp->id ? 'selected' : '' }}>
+                            {{ $emp->name }} @if($emp->email) ({{ $emp->email }}) @endif
+                          </option>
+                        @endforeach
+                      </select>
+                      @if($isHrisEdit)
+                        <input type="hidden" name="hris_employee_id" value="{{ $editUser->hris_employee_id }}">
+                      @endif
 
-                  <div class="mb-3">
-                    <label class="form-label">Full Name</label>
-                    <input type="text"
-                           class="form-control @error('name') is-invalid @enderror"
-                           name="name"
-                           id="field_name"
-                           value="{{ old('name', $isEdit ? $editUser->name : '') }}"
-                           placeholder="e.g. John Doe"
-                           @if($isHrisEdit) readonly @endif>
-                    @error('name')
-                      <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                  </div>
+                      @error('hris_employee_id')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                      @enderror
+                      <small class="text-muted d-block mt-1">
+                        Jika dipilih: <strong>Name</strong>, <strong>Username</strong>, dan <strong>Email</strong> akan mengikuti data HRIS.
+                      </small>
+                    </div>
 
-                  <div class="row">
-                    <div class="col-md-6 mb-3">
-                      <label class="form-label">Username</label>
+                    <div class="mb-3">
+                      <label class="form-label">Full Name</label>
                       <input type="text"
-                             class="form-control @error('username') is-invalid @enderror"
-                             name="username"
-                             id="field_username"
-                             value="{{ old('username', $isEdit ? $editUser->username : '') }}"
-                             placeholder="e.g. johndoe"
+                             class="form-control @error('name') is-invalid @enderror"
+                             name="name"
+                             id="field_name"
+                             value="{{ old('name', $isEdit ? $editUser->name : '') }}"
+                             placeholder="e.g. John Doe"
                              @if($isHrisEdit) readonly @endif>
-                      @error('username')
+                      @error('name')
                         <div class="invalid-feedback">{{ $message }}</div>
                       @enderror
                     </div>
 
-                    <div class="col-md-6 mb-3">
-                      <label class="form-label">Email</label>
-                      <input type="email"
-                             class="form-control @error('email') is-invalid @enderror"
-                             name="email"
-                             id="field_email"
-                             value="{{ old('email', $isEdit ? $editUser->email : '') }}"
-                             placeholder="e.g. john@example.com"
-                             @if($isHrisEdit) readonly @endif>
-                      @error('email')
-                        <div class="invalid-feedback">{{ $message }}</div>
-                      @enderror
-                    </div>
-                  </div>
-
-                  {{-- NOMOR WA --}}
-                  <div class="mb-3">
-                    <label class="form-label">Nomor WhatsApp</label>
-                    <input type="text"
-                           class="form-control @error('nomor_wa') is-invalid @enderror"
-                           name="nomor_wa"
-                           id="field_nomor_wa"
-                           value="{{ old('nomor_wa', $isEdit ? $editUser->nomor_wa : '') }}"
-                           placeholder="e.g. 62812xxxxxxx">
-                    @error('nomor_wa')
-                      <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                    <small class="text-muted">Gunakan format angka saja, contoh: 62812xxxxxxx.</small>
-                  </div>
-
-                  <div class="mb-3">
-                    <label class="form-label">Department</label>
-                    <select class="form-select select2 @error('department_id') is-invalid @enderror"
-                            name="department_id"
-                            data-placeholder="Select Department">
-                      <option value=""></option>
-                      @foreach($departments as $dep)
-                        <option value="{{ $dep->id }}"
-                          {{ (string) old('department_id', $isEdit ? $editUser->department_id : '') === (string) $dep->id ? 'selected' : '' }}>
-                          {{ $dep->code }} - {{ $dep->name }}
-                        </option>
-                      @endforeach
-                    </select>
-                    @error('department_id')
-                      <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                  </div>
-
-                  {{-- ====== ROLE FIELD (boleh diubah walau HRIS) ====== --}}
-                  <div class="mb-3">
-                    <label class="form-label">Role</label>
-                    <select class="form-select select2 @error('role_id') is-invalid @enderror"
-                            name="role_id"
-                            data-placeholder="Select Role">
-                      <option value=""></option>
-                      @foreach($roles as $role)
-                        <option value="{{ $role->id }}"
-                          {{ (string) old('role_id', $isEdit ? $editUser->role_id : '') === (string) $role->id ? 'selected' : '' }}>
-                          {{ $role->name }}
-                        </option>
-                      @endforeach
-                    </select>
-                    @error('role_id')
-                      <div class="invalid-feedback">{{ $message }}</div>
-                    @enderror
-                  </div>
-                  {{-- ===================== --}}
-
-                  {{-- PASSWORD: hanya untuk user NON-HRIS --}}
-                  <div id="password_row_wrapper" class="{{ $isHrisEdit ? 'd-none' : '' }}">
                     <div class="row">
                       <div class="col-md-6 mb-3">
-                        <label class="form-label {{ !$isEdit ? 'required' : '' }}">
-                          {{ $isEdit ? 'New Password' : 'Password' }}
-                        </label>
-                        <input type="password"
-                               class="form-control @error('password') is-invalid @enderror"
-                               name="password"
-                               id="password_field"
-                               @if($passwordRequired) required @endif
-                               placeholder="{{ $isEdit ? 'Leave empty to keep old password' : '' }}">
-                        @error('password')
+                        <label class="form-label">Username</label>
+                        <input type="text"
+                               class="form-control @error('username') is-invalid @enderror"
+                               name="username"
+                               id="field_username"
+                               value="{{ old('username', $isEdit ? $editUser->username : '') }}"
+                               placeholder="e.g. johndoe"
+                               @if($isHrisEdit) readonly @endif>
+                        @error('username')
                           <div class="invalid-feedback">{{ $message }}</div>
                         @enderror
                       </div>
 
                       <div class="col-md-6 mb-3">
-                        <label class="form-label {{ !$isEdit ? 'required' : '' }}">
-                          {{ $isEdit ? 'Confirm New Password' : 'Confirm Password' }}
-                        </label>
-                        <input type="password"
-                               class="form-control"
-                               name="password_confirmation"
-                               id="password_confirmation_field"
-                               @if($passwordRequired) required @endif>
+                        <label class="form-label">Email</label>
+                        <input type="email"
+                               class="form-control @error('email') is-invalid @enderror"
+                               name="email"
+                               id="field_email"
+                               value="{{ old('email', $isEdit ? $editUser->email : '') }}"
+                               placeholder="e.g. john@example.com"
+                               @if($isHrisEdit) readonly @endif>
+                        @error('email')
+                          <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
                       </div>
                     </div>
-                  </div>
 
-                  <div id="hris_password_info"
-                       class="alert alert-info small mt-2 {{ $isHrisEdit ? '' : 'd-none' }}">
-                    User ini terhubung ke HRIS. <br>
-                    <strong>Password</strong> mengikuti password di sistem HRIS dan
-                    <strong>tidak dapat diubah</strong> dari aplikasi ini.
-                  </div>
-
-                  <div class="mb-3 mt-2">
-                    <label class="form-label d-block">Status</label>
-                    <div class="form-check form-switch">
-                      <input class="form-check-input"
-                             type="checkbox"
-                             id="is_active"
-                             name="is_active"
-                             value="1"
-                             @checked(old(
-                               'is_active',
-                               $isEdit ? ($editUser->is_active ? 1 : 0) : 1
-                             ))>
-                      <label class="form-check-label" for="is_active">Active</label>
+                    {{-- NOMOR WA --}}
+                    <div class="mb-3">
+                      <label class="form-label">Nomor WhatsApp</label>
+                      <input type="text"
+                             class="form-control @error('nomor_wa') is-invalid @enderror"
+                             name="nomor_wa"
+                             id="field_nomor_wa"
+                             value="{{ old('nomor_wa', $isEdit ? $editUser->nomor_wa : '') }}"
+                             placeholder="e.g. 62812xxxxxxx">
+                      @error('nomor_wa')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                      @enderror
+                      <small class="text-muted">Gunakan format angka saja, contoh: 62812xxxxxxx.</small>
                     </div>
-                  </div>
 
-                  <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-primary">
-                      <i class="mdi mdi-content-save-outline me-1"></i>
-                      {{ $isEdit ? 'Update' : 'Save' }}
-                    </button>
+                    <div class="mb-3">
+                      <label class="form-label">Department</label>
+                      <select class="form-select select2 @error('department_id') is-invalid @enderror"
+                              name="department_id"
+                              data-placeholder="Select Department">
+                        <option value=""></option>
+                        @foreach($departments as $dep)
+                          <option value="{{ $dep->id }}"
+                            {{ (string) old('department_id', $isEdit ? $editUser->department_id : '') === (string) $dep->id ? 'selected' : '' }}>
+                            {{ $dep->code }} - {{ $dep->name }}
+                          </option>
+                        @endforeach
+                      </select>
+                      @error('department_id')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                      @enderror
+                    </div>
 
-                    @if($isEdit)
-                      <a href="{{ route('access.users.index', request()->except('edit', 'page')) }}"
-                         class="btn btn-outline-secondary">
-                        Cancel
-                      </a>
-                    @else
-                      <button type="reset" class="btn btn-outline-secondary">
-                        Reset
+                    {{-- ROLE --}}
+                    <div class="mb-3">
+                      <label class="form-label">Role</label>
+                      <select class="form-select select2 @error('role_id') is-invalid @enderror"
+                              name="role_id"
+                              data-placeholder="Select Role">
+                        <option value=""></option>
+                        @foreach($roles as $roleOption)
+                          <option value="{{ $roleOption->id }}"
+                            {{ (string) old('role_id', $isEdit ? $editUser->role_id : '') === (string) $roleOption->id ? 'selected' : '' }}>
+                            {{ $roleOption->name }}
+                          </option>
+                        @endforeach
+                      </select>
+                      @error('role_id')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                      @enderror
+                    </div>
+
+                    {{-- PASSWORD: hanya untuk user NON-HRIS --}}
+                    <div id="password_row_wrapper" class="{{ $isHrisEdit ? 'd-none' : '' }}">
+                      <div class="row">
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label {{ !$isEdit ? 'required' : '' }}">
+                            {{ $isEdit ? 'New Password' : 'Password' }}
+                          </label>
+                          <input type="password"
+                                 class="form-control @error('password') is-invalid @enderror"
+                                 name="password"
+                                 id="password_field"
+                                 @if($passwordRequired) required @endif
+                                 placeholder="{{ $isEdit ? 'Leave empty to keep old password' : '' }}">
+                          @error('password')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                          @enderror
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                          <label class="form-label {{ !$isEdit ? 'required' : '' }}">
+                            {{ $isEdit ? 'Confirm New Password' : 'Confirm Password' }}
+                          </label>
+                          <input type="password"
+                                 class="form-control"
+                                 name="password_confirmation"
+                                 id="password_confirmation_field"
+                                 @if($passwordRequired) required @endif>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div id="hris_password_info"
+                         class="alert alert-info small mt-2 {{ $isHrisEdit ? '' : 'd-none' }}">
+                      User ini terhubung ke HRIS. <br>
+                      <strong>Password</strong> mengikuti password di sistem HRIS dan
+                      <strong>tidak dapat diubah</strong> dari aplikasi ini.
+                    </div>
+
+                    <div class="mb-3 mt-2">
+                      <label class="form-label d-block">Status</label>
+                      <div class="form-check form-switch">
+                        <input class="form-check-input"
+                               type="checkbox"
+                               id="is_active"
+                               name="is_active"
+                               value="1"
+                               @checked(old('is_active', $isEdit ? ($editUser->is_active ? 1 : 0) : 1))>
+                        <label class="form-check-label" for="is_active">Active</label>
+                      </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                      <button type="submit" class="btn btn-primary">
+                        <i class="mdi mdi-content-save-outline me-1"></i>
+                        {{ $isEdit ? 'Update' : 'Save' }}
                       </button>
-                    @endif
+
+                      @if($isEdit)
+                        <a href="{{ route('access.users.index', request()->except('edit', 'page')) }}"
+                           class="btn btn-outline-secondary">
+                          Cancel
+                        </a>
+                      @else
+                        <button type="reset" class="btn btn-outline-secondary">
+                          Reset
+                        </button>
+                      @endif
+                    </div>
+                  </form>
+                @else
+                  <div class="alert alert-warning mb-0">
+                    Anda tidak memiliki izin untuk {{ $isEdit ? 'mengubah' : 'membuat' }} user.
                   </div>
-                </form>
+                @endif
               </div>
             </div>
           </div>
@@ -422,24 +434,28 @@
                       </td>
                       <td class="col-aksi">
                         <div class="d-flex justify-content-center gap-2">
-                          {{-- Edit: kirim ?edit= --}}
-                          <a href="{{ route('access.users.index', array_merge(request()->except('page','edit'), ['edit' => $row->id])) }}"
-                             class="btn btn-sm btn-outline-primary btn-icon"
-                             title="Edit">
-                            <i class="mdi mdi-pencil-outline"></i>
-                          </a>
+                          @if($canUpdate)
+                            {{-- Edit: kirim ?edit= --}}
+                            <a href="{{ route('access.users.index', array_merge(request()->except('page','edit'), ['edit' => $row->id])) }}"
+                               class="btn btn-sm btn-outline-primary btn-icon"
+                               title="Edit">
+                              <i class="mdi mdi-pencil-outline"></i>
+                            </a>
+                          @endif
 
-                          <form action="{{ route('access.users.destroy', $row->id) }}"
-                                method="POST"
-                                onsubmit="return confirm('Are you sure you want to delete this user? This action cannot be undone.');">
-                            @csrf
-                            @method('DELETE')
-                            <button type="submit"
-                                    class="btn btn-sm btn-outline-danger btn-icon"
-                                    title="Delete">
-                              <i class="mdi mdi-trash-can-outline"></i>
-                            </button>
-                          </form>
+                          @if($canDelete)
+                            <form action="{{ route('access.users.destroy', $row->id) }}"
+                                  method="POST"
+                                  onsubmit="return confirm('Are you sure you want to delete this user? This action cannot be undone.');">
+                              @csrf
+                              @method('DELETE')
+                              <button type="submit"
+                                      class="btn btn-sm btn-outline-danger btn-icon"
+                                      title="Delete">
+                                <i class="mdi mdi-trash-can-outline"></i>
+                              </button>
+                            </form>
+                          @endif
                         </div>
                       </td>
                     </tr>
@@ -513,26 +529,19 @@
         $name.prop('readonly', true);
         $user.prop('readonly', true);
         $email.prop('readonly', true);
-
-        // sembunyikan row password + hapus required
         $pwdWrap.addClass('d-none');
         $pwd.prop('required', false);
         $pwdConf.prop('required', false);
-
         $info.removeClass('d-none');
       } else {
         $name.prop('readonly', false);
         $user.prop('readonly', false);
         $email.prop('readonly', false);
-
         $pwdWrap.removeClass('d-none');
-
-        // Kalau mode CREATE (bukan edit), password wajib
         if (!isEdit) {
           $pwd.prop('required', true);
           $pwdConf.prop('required', true);
         }
-
         $info.addClass('d-none');
       }
     }
@@ -541,16 +550,13 @@
       const $select = $('#hris_employee_id');
       if (!$select.length) return;
 
-      // kalau sedang edit user HRIS, langsung lock dari awal
       if (isHrisEditBlade) {
         applyHrisLock(true, isEditBlade);
       }
 
-      // untuk create / edit non-HRIS, perubahan dropdown HRIS akan lock / unlock
       $select.on('change', function() {
         const selected = this.options[this.selectedIndex];
         if (!selected || !selected.value) {
-          // tidak pilih HRIS -> unlock manual
           applyHrisLock(false, isEditBlade);
           return;
         }
@@ -561,7 +567,7 @@
 
         if (name) {
           $('#field_name').val(name);
-          $('#field_username').val(name); // username dari name HRIS
+          $('#field_username').val(name);
         }
         if (email) {
           $('#field_email').val(email);
@@ -570,7 +576,6 @@
           $('#field_nomor_wa').val(wa);
         }
 
-        // ketika pilih HRIS, lock field name/username/email & sembunyikan password input
         applyHrisLock(true, isEditBlade);
       });
     }

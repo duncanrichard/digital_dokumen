@@ -8,13 +8,46 @@ use Illuminate\Http\Request;
 
 class DepartmentController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $user = auth()->user();
+
+            if (!$user) {
+                abort(401);
+            }
+
+            $roleName     = optional($user->role)->name;
+            $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+
+            if ($isSuperadmin) {
+                return $next($request);
+            }
+
+            $method = $request->route()->getActionMethod();
+
+            $requiredPermission = match ($method) {
+                'index'  => 'master.departments.view',
+                'store'  => 'master.departments.create',
+                'update' => 'master.departments.update',
+                'destroy'=> 'master.departments.delete',
+                default  => 'master.departments.view',
+            };
+
+            if (!$user->role || !$user->role->hasPermissionTo($requiredPermission)) {
+                abort(403, 'Anda tidak memiliki izin untuk mengakses fitur ini.');
+            }
+
+            return $next($request);
+        });
+    }
+
     public function index(Request $request)
     {
         $q = trim((string) $request->get('q'));
 
         $items = Department::when($q !== '', function ($query) use ($q) {
                 $query->where(function ($sub) use ($q) {
-                    // PostgreSQL ILIKE for case-insensitive search
                     $sub->where('code', 'ilike', "%{$q}%")
                         ->orWhere('name', 'ilike', "%{$q}%");
                 });
@@ -32,7 +65,7 @@ class DepartmentController extends Controller
             'code'        => [
                 'required',
                 'max:20',
-                // izinkan huruf, angka, -, _, koma, titik, slash, dan spasi
+                // huruf, angka, -, _, ., ,, /, dan spasi
                 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/',
                 'unique:departments,code',
             ],
@@ -43,7 +76,8 @@ class DepartmentController extends Controller
 
         Department::create($validated);
 
-        return redirect()->route('master.departments.index')
+        return redirect()
+            ->route('master.departments.index')
             ->with('success', 'Divisi has been created.');
     }
 
@@ -53,7 +87,6 @@ class DepartmentController extends Controller
             'code'        => [
                 'required',
                 'max:20',
-                // sama seperti di store()
                 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/',
                 'unique:departments,code,' . $department->id,
             ],
@@ -64,7 +97,8 @@ class DepartmentController extends Controller
 
         $department->update($validated);
 
-        return redirect()->route('master.departments.index')
+        return redirect()
+            ->route('master.departments.index')
             ->with('success', 'Divisi has been updated.');
     }
 
@@ -72,7 +106,8 @@ class DepartmentController extends Controller
     {
         $department->delete();
 
-        return redirect()->route('master.departments.index')
+        return redirect()
+            ->route('master.departments.index')
             ->with('success', 'Divisi has been deleted.');
     }
 }
