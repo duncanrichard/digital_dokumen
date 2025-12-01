@@ -34,9 +34,7 @@
       "slug": "master-data",
       "submenu": [
         { "url": "/master/jenis-dokumen", "name": "Document Types",      "slug": "master-jenis-dokumen" },
-        { "url": "/master/departments",   "name": "Divisi",              "slug": "master-departments" },
-        { "url": "/master/tags",          "name": "Tags & Keywords",     "slug": "master-tags" },
-        { "url": "/master/locations",     "name": "Physical Locations",  "slug": "master-locations" }
+        { "url": "/master/departments",   "name": "Divisi",              "slug": "master-departments" }
       ]
     },
 

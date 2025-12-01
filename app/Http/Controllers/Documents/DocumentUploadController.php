@@ -197,6 +197,7 @@ class DocumentUploadController extends Controller
             'publish_date'               => ['required','date'],
             'file'                       => ['required','file','mimes:pdf','max:10240'],
             'is_active'                  => ['nullable','in:1'],
+            // field distribusi tetap divalidasi kalau suatu saat dipakai di form lain
             'distribute_mode'            => ['nullable','in:all,selected'],
             'distribution_departments'   => ['array'],
             'distribution_departments.*' => ['uuid','exists:departments,id'],
@@ -232,15 +233,10 @@ class DocumentUploadController extends Controller
                     'read_notifikasi'  => 0,
                 ]);
 
-                // Distribusi
-                $mode = $validated['distribute_mode'] ?? 'all';
-                if ($mode === 'all') {
-                    $allDeptIds = Department::where('is_active', true)->pluck('id')->all();
-                    $doc->distributedDepartments()->sync($allDeptIds);
-                } else {
-                    $selected = collect($validated['distribution_departments'] ?? [])->unique()->values()->all();
-                    $doc->distributedDepartments()->sync($selected);
-                }
+                // Distribusi AWAL: hanya departemen pemilik dokumen
+                $doc->distributedDepartments()->sync([
+                    $base->department_id,
+                ]);
             });
 
             $displayNumber = "{$base->document_number} R{$nextRevision}";
@@ -274,15 +270,10 @@ class DocumentUploadController extends Controller
                 'read_notifikasi'  => 0,
             ]);
 
-            // Distribusi
-            $mode = $validated['distribute_mode'] ?? 'all';
-            if ($mode === 'all') {
-                $allDeptIds = Department::where('is_active', true)->pluck('id')->all();
-                $doc->distributedDepartments()->sync($allDeptIds);
-            } else {
-                $selected = collect($validated['distribution_departments'] ?? [])->unique()->values()->all();
-                $doc->distributedDepartments()->sync($selected);
-            }
+            // Distribusi AWAL: hanya departemen pemilik dokumen
+            $doc->distributedDepartments()->sync([
+                $dept->id,
+            ]);
         });
 
         return redirect()->route('documents.index')
@@ -362,7 +353,7 @@ class DocumentUploadController extends Controller
                 Storage::disk('public')->delete($oldPath);
             }
 
-            // Distribusi
+            // Distribusi (di UPDATE tetap pakai mode all/selected sesuai form edit)
             $mode = $validated['distribute_mode'] ?? 'all';
             if ($mode === 'all') {
                 $allDeptIds = Department::where('is_active', true)->pluck('id')->all();
