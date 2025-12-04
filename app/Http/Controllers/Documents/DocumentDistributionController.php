@@ -46,8 +46,14 @@ class DocumentDistributionController extends Controller
 
     public function index(Request $request)
     {
-        $q          = trim((string) $request->query('q', ''));
-        $documentId = (string) $request->query('document_id', '');
+        $q = trim((string) $request->query('q', ''));
+
+        // Bisa datang sebagai string atau array
+        $documentIds = $request->query('document_ids', []);
+        if (! is_array($documentIds)) {
+            $documentIds = [$documentIds];
+        }
+        $documentIds = array_values(array_filter(array_map('strval', $documentIds)));
 
         $driver = DB::getDriverName();
         $likeOp = $driver === 'pgsql' ? 'ILIKE' : 'LIKE';
@@ -70,155 +76,231 @@ class DocumentDistributionController extends Controller
                 'revision',
                 'publish_date',
                 'is_active',
+                'department_id',
             ]);
 
-        if ($documentId === '' && $docs->isNotEmpty()) {
-            $documentId = (string) $docs->first()->id;
-        }
-
-        $selectedDoc = $documentId
-            ? Document::where('is_active', true)->find($documentId)
-            : null;
+        // Tidak ada default terpilih – user harus memilih sendiri
+        $selectedDocs = $docs->whereIn('id', $documentIds)->values();
 
         $departments = Department::where('is_active', true)
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $distributions = $selectedDoc
-            ? DocumentDistribution::where('document_id', $selectedDoc->id)->get()
-            : collect();
+        // index by id untuk lookup di view (main division label)
+        $departmentsById = $departments->keyBy('id');
 
-        $selectedDepartments = $distributions->pluck('department_id')->all();
+        $selectedDepartmentsByDoc = [];
+
+        if ($selectedDocs->isNotEmpty()) {
+            $distributions = DocumentDistribution::whereIn('document_id', $selectedDocs->pluck('id'))
+                ->get();
+
+            $selectedDepartmentsByDoc = $distributions
+                ->groupBy('document_id')
+                ->map(function ($rows) {
+                    return $rows->pluck('department_id')->all();
+                })
+                ->toArray();
+        }
 
         return view('documents.distribution.index', [
-            'q'                   => $q,
-            'documents'           => $docs,
-            'documentId'          => $documentId,
-            'selectedDoc'         => $selectedDoc,
-            'departments'         => $departments,
-            'selectedDepartments' => $selectedDepartments,
+            'q'                        => $q,
+            'documents'                => $docs,
+            'selectedDocumentIds'      => $documentIds,
+            'selectedDocs'             => $selectedDocs,
+            'departments'              => $departments,
+            'departmentsById'          => $departmentsById,
+            'selectedDepartmentsByDoc' => $selectedDepartmentsByDoc,
         ]);
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
-            'document_id'     => [
-                'required',
+            'document_ids'   => ['required', 'array', 'min:1'],
+            'document_ids.*' => [
                 'uuid',
                 Rule::exists('documents', 'id')->where(fn($q) => $q->where('is_active', true)),
             ],
-            'department_id'   => ['array'],
-            'department_id.*' => [
+            'distribution'        => ['nullable', 'array'],
+            'distribution.*'      => ['nullable', 'array'],
+            'distribution.*.*'    => [
                 'uuid',
                 Rule::exists('departments', 'id')->where(fn($q) => $q->where('is_active', true)),
             ],
+            'send_whatsapp'      => ['nullable', 'boolean'],
         ], [], [
-            'document_id'   => 'Dokumen',
-            'department_id' => 'Divisi',
+            'document_ids' => 'Dokumen',
+            'distribution' => 'Distribusi',
         ]);
 
-        $documentId = (string) $data['document_id'];
-        $document   = Document::where('is_active', true)->findOrFail($documentId);
+        $documentIdsRaw = $data['document_ids'] ?? [];
+        $documentIds    = array_values(array_unique(array_map('strval', $documentIdsRaw)));
 
-        $primaryDeptId = $document->department_id ? (string) $document->department_id : null;
-        $deptIds       = array_values(array_unique(array_map('strval', $data['department_id'] ?? [])));
+        // Ambil dokumen yang valid & aktif
+        $documents = Document::whereIn('id', $documentIds)
+            ->where('is_active', true)
+            ->get();
 
-        if ($primaryDeptId) {
-            $deptIds[] = $primaryDeptId;
+        if ($documents->isEmpty()) {
+            return redirect()
+                ->route('documents.distribution.index')
+                ->withErrors(['document_ids' => 'Tidak ada dokumen yang valid/aktif.']);
         }
 
-        $deptIds = array_values(array_unique($deptIds));
+        $distributionInput = $data['distribution'] ?? [];
 
-        DB::transaction(function () use ($documentId, $deptIds) {
-            DocumentDistribution::where('document_id', $documentId)->delete();
+        // Kumpulkan list department per dokumen (termasuk main division)
+        $perDocDeptIds = [];
 
-            if (! empty($deptIds)) {
-                $now  = now();
-                $rows = [];
+        foreach ($documents as $doc) {
+            $docId = (string) $doc->id;
 
-                foreach ($deptIds as $d) {
-                    $rows[] = [
-                        'document_id'   => $documentId,
-                        'department_id' => $d,
-                        'is_active'     => true,
-                        'created_at'    => $now,
-                        'updated_at'    => $now,
-                    ];
+            $idsFromForm = $distributionInput[$docId] ?? [];
+            if (! is_array($idsFromForm)) {
+                $idsFromForm = [];
+            }
+            $idsFromForm = array_map('strval', $idsFromForm);
+
+            $primaryDeptId = $doc->department_id ? (string) $doc->department_id : null;
+
+            if ($primaryDeptId) {
+                $idsFromForm[] = $primaryDeptId;
+            }
+
+            $idsFromForm = array_values(array_unique($idsFromForm));
+
+            $perDocDeptIds[$docId] = $idsFromForm;
+        }
+
+        // Simpan ke database
+        DB::transaction(function () use ($perDocDeptIds) {
+            foreach ($perDocDeptIds as $documentId => $deptIds) {
+                DocumentDistribution::where('document_id', $documentId)->delete();
+
+                if (! empty($deptIds)) {
+                    $now  = now();
+                    $rows = [];
+
+                    foreach ($deptIds as $d) {
+                        $rows[] = [
+                            'document_id'   => $documentId,
+                            'department_id' => $d,
+                            'is_active'     => true,
+                            'created_at'    => $now,
+                            'updated_at'    => $now,
+                        ];
+                    }
+                    DocumentDistribution::insert($rows);
                 }
-                DocumentDistribution::insert($rows);
             }
         });
 
-        // =======================
-        //  Kirim notif Fonnte
-        // =======================
-        try {
-            $deptNames = Department::whereIn('id', $deptIds)
-                ->orderBy('name')
-                ->pluck('name')
-                ->toArray();
+        // Apakah perlu kirim WA?
+        $sendWa = $request->boolean('send_whatsapp');
 
-            $groupId = '120363404395085332@g.us';
-            $token   = 'nbrnAs1M8J94FxwTTgo2';
+        if ($sendWa) {
+            // =======================
+            //  Kirim notif Fonnte (1 pesan untuk semua dokumen yang diproses)
+            // =======================
+            try {
+                // Ambil semua department unik dari semua dokumen
+                $allDeptIds = [];
+                foreach ($perDocDeptIds as $ids) {
+                    $allDeptIds = array_merge($allDeptIds, $ids);
+                }
+                $allDeptIds = array_values(array_unique($allDeptIds));
 
-            $publishDate = $document->publish_date
-                ? $document->publish_date->format('d M Y')
-                : '-';
+                $deptNameLookup = Department::whereIn('id', $allDeptIds)
+                    ->orderBy('name')
+                    ->get()
+                    ->pluck('name', 'id')
+                    ->toArray();
 
-            $divisiList = "";
-            foreach ($deptNames as $index => $name) {
-                $no = $index + 1;
-                $divisiList .= "   {$no}. {$name}\n";
-            }
+                $groupId = '120363404395085332@g.us';
+                $token   = 'nbrnAs1M8J94FxwTTgo2';
 
-            $message =
-                "*Pemberitahuan Distribusi Dokumen Resmi*\n\n" .
-                "Yth. Bapak/Ibu Rekan Kerja\n" .
-                "Dengan hormat,\n\n" .
-                "Sebagai bagian dari pengelolaan dan pengendalian dokumen perusahaan, bersama ini kami sampaikan bahwa telah diterbitkan dokumen baru dengan rincian sebagai berikut:\n\n" .
-                "• *Judul Dokumen*    : {$document->name}\n" .
-                "• *Nomor Dokumen*    : {$document->document_number}\n" .
-                "• *Tanggal Terbit*   : {$publishDate}\n" .
-                "• *Divisi Distribution*    :\n" .
-                $divisiList . "\n" .
-                "• *Diterbitkan oleh* : Legal\n\n" .
-                "Dokumen dimaksud dapat diakses melalui sistem *Document Control* pada tautan berikut:\n" .
-                "https://demo.dokumen.dsicorp.id/\n\n" .
-                "Dimohon kepada divisi yang terkait untuk segera meninjau, mendistribusikan, dan menindaklanjuti dokumen tersebut sesuai dengan tugas, kewenangan, dan prosedur yang berlaku di lingkungan perusahaan.\n\n" .
-                "Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja sama Bapak/Ibu, kami ucapkan terima kasih.\n\n" .
-                "Hormat kami,\n" .
-                "Divisi Legal\n";
+                $messageHeader =
+                    "*Pemberitahuan Distribusi Dokumen Resmi*\n\n" .
+                    "Yth. Bapak/Ibu Rekan Kerja\n" .
+                    "Dengan hormat,\n\n" .
+                    "Berikut ini adalah daftar dokumen yang baru saja dilakukan pengaturan distribusinya melalui sistem *Document Control*:\n\n";
 
-            $httpOptions = [];
-            if (app()->environment('local')) {
-                $httpOptions['verify'] = false;
-            }
+                $messageDocs = "";
+                $counter     = 1;
 
-            $response = Http::withOptions($httpOptions)
-                ->withHeaders([
-                    'Authorization' => $token,
-                ])
-                ->asForm()
-                ->post('https://api.fonnte.com/send', [
-                    'target'  => $groupId,
-                    'message' => $message,
+                foreach ($documents as $doc) {
+                    $docId         = (string) $doc->id;
+                    $deptIdsForDoc = $perDocDeptIds[$docId] ?? [];
+
+                    $publishDate = $doc->publish_date
+                        ? $doc->publish_date->format('d M Y')
+                        : '-';
+
+                    $divisiList = "";
+                    $idx        = 1;
+                    foreach ($deptIdsForDoc as $dId) {
+                        if (! isset($deptNameLookup[$dId])) {
+                            continue;
+                        }
+                        $divisiList .= "      {$idx}. {$deptNameLookup[$dId]}\n";
+                        $idx++;
+                    }
+
+                    $messageDocs .=
+                        "{$counter}. *{$doc->document_number}* - {$doc->name}\n" .
+                        "   • Tanggal Terbit : {$publishDate}\n" .
+                        "   • Divisi Tujuan  :\n" .
+                        ($divisiList !== "" ? $divisiList : "      -\n") .
+                        "\n";
+
+                    $counter++;
+                }
+
+                $messageFooter =
+                    "Dokumen-dokumen di atas dapat diakses melalui sistem *Document Control* pada tautan berikut:\n" .
+                    "https://demo.dokumen.dsicorp.id/\n\n" .
+                    "Dimohon kepada divisi yang terkait untuk meninjau, mendistribusikan, dan menindaklanjuti dokumen tersebut sesuai tugas, kewenangan, dan prosedur yang berlaku di lingkungan perusahaan.\n\n" .
+                    "Demikian pemberitahuan ini kami sampaikan. Atas perhatian dan kerja sama Bapak/Ibu, kami ucapkan terima kasih.\n\n" .
+                    "Hormat kami,\n" .
+                    "Divisi Legal\n";
+
+                $message = $messageHeader . $messageDocs . $messageFooter;
+
+                $httpOptions = [];
+                if (app()->environment('local')) {
+                    $httpOptions['verify'] = false;
+                }
+
+                $response = Http::withOptions($httpOptions)
+                    ->withHeaders([
+                        'Authorization' => $token,
+                    ])
+                    ->asForm()
+                    ->post('https://api.fonnte.com/send', [
+                        'target'  => $groupId,
+                        'message' => $message,
+                    ]);
+
+                Log::info('Fonnte response (multi-doc distribution)', [
+                    'status' => $response->status(),
+                    'body'   => $response->body(),
+                    'docs'   => $documentIds,
                 ]);
-
-            Log::info('Fonnte response', [
-                'status'  => $response->status(),
-                'body'    => $response->body(),
-                'doc_id'  => $documentId,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('WA Fonnte Error', [
-                'error' => $e->getMessage(),
-                'doc'   => $documentId,
-            ]);
+            } catch (\Throwable $e) {
+                Log::error('WA Fonnte Error (multi-doc distribution)', [
+                    'error' => $e->getMessage(),
+                    'docs'  => $documentIds,
+                ]);
+            }
         }
 
+        $successMsg = $sendWa
+            ? 'Distribusi beberapa dokumen berhasil disimpan & notifikasi WA telah dikirim dalam 1 pesan.'
+            : 'Distribusi beberapa dokumen berhasil disimpan tanpa mengirim notifikasi WA.';
+
         return redirect()
-            ->route('documents.distribution.index', ['document_id' => $documentId])
-            ->with('success', 'Distribusi dokumen berhasil disimpan & notifikasi telah dikirim.');
+            ->route('documents.distribution.index', ['document_ids' => $documentIds])
+            ->with('success', $successMsg);
     }
 }

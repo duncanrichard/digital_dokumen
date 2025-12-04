@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use setasign\Fpdi\Fpdi;
+use Illuminate\Support\Facades\Log;
 
 class DocumentUploadController extends Controller
 {
@@ -118,16 +119,13 @@ class DocumentUploadController extends Controller
             ->orderBy('name')
             ->get(['id','code','name']);
 
-        // CATATAN PENTING:
-        // Jangan lagi auto-set $filterDeptId = $lockDeptId.
-        // Kalau dipaksa, filter "department_id = divisi user" akan membunuh dokumen
-        // yang hanya datang dari distribusi (document_distributions).
-        // Jadi, $filterDeptId sekarang murni dari request user saja.
-
         $items = Document::with([
                 'jenisDokumen:id,kode,nama',
                 'department:id,code,name',
-                'distributedDepartments:id'
+                'distributedDepartments:id',
+                // relasi dokumen diubah ke / dari dokumen lain
+                'changedToDocuments:id,document_number,revision',
+                'changedFromDocuments:id,document_number,revision',
             ])
             // Pencarian teks
             ->when($q !== '', function ($query) use ($q) {
@@ -160,9 +158,6 @@ class DocumentUploadController extends Controller
             })
 
             // PEMBATASAN BERDASARKAN DIVISI USER YANG LOGIN (security gate)
-            // User hanya boleh melihat:
-            //  - dokumen milik divisinya sendiri, ATAU
-            //  - dokumen dari divisi lain tapi didistribusikan ke divisinya.
             ->when($lockDeptId, function ($q4) use ($lockDeptId) {
                 $q4->where(function ($sub) use ($lockDeptId) {
                     $sub->where('department_id', $lockDeptId)
@@ -187,7 +182,7 @@ class DocumentUploadController extends Controller
         ));
     }
 
-    // ================== STORE (BARU / REVISI) ==================
+    // ================== STORE (BARU / REVISI / UBAH JADI DOK BARU) ==================
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -197,29 +192,38 @@ class DocumentUploadController extends Controller
             'publish_date'               => ['required','date'],
             'file'                       => ['required','file','mimes:pdf','max:10240'],
             'is_active'                  => ['nullable','in:1'],
-            // field distribusi tetap divalidasi kalau suatu saat dipakai di form lain
+            // field distribusi (opsional)
             'distribute_mode'            => ['nullable','in:all,selected'],
             'distribution_departments'   => ['array'],
             'distribution_departments.*' => ['uuid','exists:departments,id'],
             'revise_of'                  => ['nullable','uuid','exists:documents,id'],
+            // dokumen asal yang DIUBAH menjadi dokumen baru (nomor baru)
+            'change_of'                  => ['nullable','uuid','exists:documents,id'],
+            // catatan dokumen (opsional)
+            'notes'                      => ['nullable','string'],
         ]);
 
         $storedPath = $request->file('file')->store('documents', 'public');
 
-        // === MODE REVISI ===
+        // Nilai boolean is_active: true kalau checkbox dicentang, false kalau tidak
+        $isActive   = $request->has('is_active');
+        $changeOfId = $validated['change_of'] ?? null;
+
+        // === MODE REVISI (nomor sama, revision naik) ===
         if (!empty($validated['revise_of'])) {
-            $base = Document::with(['jenisDokumen:id,kode', 'department:id,code'])
+            $base = Document::with(['jenisDokumen:id,kode', 'department:id,code', 'distributedDepartments:id'])
                 ->findOrFail($validated['revise_of']);
 
             $maxRevision  = (int) Document::where('document_number', $base->document_number)->max('revision');
             $nextRevision = $maxRevision + 1;
 
-            DB::transaction(function () use ($validated, $request, $base, $storedPath, $nextRevision) {
+            DB::transaction(function () use ($validated, $base, $storedPath, $nextRevision, $isActive) {
                 // Nonaktifkan semua versi lama
                 Document::where('document_number', $base->document_number)
                     ->update(['is_active' => false]);
 
                 // Buat versi baru
+                /** @var \App\Models\Document $doc */
                 $doc = Document::create([
                     'jenis_dokumen_id' => $base->jenis_dokumen_id,
                     'department_id'    => $base->department_id,
@@ -229,14 +233,19 @@ class DocumentUploadController extends Controller
                     'name'             => $validated['document_name'],
                     'publish_date'     => $validated['publish_date'],
                     'file_path'        => $storedPath,
-                    'is_active'        => $request->boolean('is_active', true),
+                    'is_active'        => $isActive,
                     'read_notifikasi'  => 0,
+                    'notes'            => $validated['notes'] ?? null, // SIMPAN CATATAN
                 ]);
 
-                // Distribusi AWAL: hanya departemen pemilik dokumen
-                $doc->distributedDepartments()->sync([
-                    $base->department_id,
-                ]);
+                // Distribusi versi baru: salin dari base (TIDAK mengutak-atik dokumen lain)
+                $baseDeptIds = $base->distributedDepartments()->pluck('departments.id')->all();
+                if (!empty($baseDeptIds)) {
+                    $doc->distributedDepartments()->sync($baseDeptIds);
+                } else {
+                    // fallback: minimal departemen pemilik
+                    $doc->distributedDepartments()->sync([$base->department_id]);
+                }
             });
 
             $displayNumber = "{$base->document_number} R{$nextRevision}";
@@ -244,7 +253,7 @@ class DocumentUploadController extends Controller
                 ->with('success', "Document revised. New number: {$displayNumber}");
         }
 
-        // === MODE BARU (R0) ===
+        // === MODE BARU (R0) / UBAH JADI DOKUMEN BARU (NOMOR BARU) ===
         $jenis = JenisDokumen::select('id','kode')->findOrFail($validated['document_type_id']);
         $dept  = Department::select('id','code')->findOrFail($validated['department_id']);
         $year  = Carbon::parse($validated['publish_date'])->format('Y');
@@ -256,7 +265,17 @@ class DocumentUploadController extends Controller
 
         $documentNumber = "{$jenis->kode}-{$dept->code}/{$nextSequence}/{$year}";
 
-        DB::transaction(function () use ($validated, $jenis, $dept, $nextSequence, $documentNumber, $storedPath, $request) {
+        DB::transaction(function () use (
+            $validated,
+            $jenis,
+            $dept,
+            $nextSequence,
+            $documentNumber,
+            $storedPath,
+            $isActive,
+            $changeOfId
+        ) {
+            /** @var \App\Models\Document $doc */
             $doc = Document::create([
                 'jenis_dokumen_id' => $jenis->id,
                 'department_id'    => $dept->id,
@@ -266,15 +285,59 @@ class DocumentUploadController extends Controller
                 'name'             => $validated['document_name'],
                 'publish_date'     => $validated['publish_date'],
                 'file_path'        => $storedPath,
-                'is_active'        => $request->boolean('is_active', true),
+                'is_active'        => $isActive,
                 'read_notifikasi'  => 0,
+                'notes'            => $validated['notes'] ?? null, // SIMPAN CATATAN
             ]);
 
-            // Distribusi AWAL: hanya departemen pemilik dokumen
-            $doc->distributedDepartments()->sync([
-                $dept->id,
-            ]);
+            // === DISTRIBUSI UNTUK DOKUMEN BARU ===
+            if (!empty($validated['distribute_mode'])) {
+                $mode = $validated['distribute_mode'];
+
+                if ($mode === 'all') {
+                    $allDeptIds = Department::where('is_active', true)->pluck('id')->all();
+                    $doc->distributedDepartments()->sync($allDeptIds);
+                } else {
+                    $selected = collect($validated['distribution_departments'] ?? [])
+                        ->unique()->values()->all();
+
+                    if (!empty($selected)) {
+                        $doc->distributedDepartments()->sync($selected);
+                    } else {
+                        $doc->distributedDepartments()->sync([$dept->id]);
+                    }
+                }
+            } else {
+                // default: hanya departemen pemilik
+                $doc->distributedDepartments()->sync([$dept->id]);
+            }
+
+            // Jika ini mode "ubah dokumen lama menjadi dokumen baru"
+            if ($changeOfId) {
+                $old = Document::with('distributedDepartments:id')->find($changeOfId);
+                if ($old) {
+                    // optional: nonaktifkan dokumen lama
+                    $old->update(['is_active' => false]);
+
+                    // relasi parent -> child di pivot document_relations
+                    $old->changedToDocuments()->attach($doc->id, [
+                        'relation_type' => 'changed_to',
+                    ]);
+
+                    // SALIN distribusi dokumen lama ke dokumen baru
+                    $oldDistIds = $old->distributedDepartments->pluck('id')->all();
+                    if (!empty($oldDistIds)) {
+                        $doc->distributedDepartments()->sync($oldDistIds);
+                    }
+                    // tidak menyentuh distribusi dokumen lama
+                }
+            }
         });
+
+        if ($changeOfId) {
+            return redirect()->route('documents.index')
+                ->with('success', "Document has been changed to new document. New number: {$documentNumber} R0");
+        }
 
         return redirect()->route('documents.index')
             ->with('success', "Document has been uploaded. Number: {$documentNumber} R0");
@@ -306,9 +369,11 @@ class DocumentUploadController extends Controller
             'publish_date'               => ['required','date'],
             'file'                       => ['nullable','file','mimes:pdf','max:10240'],
             'is_active'                  => ['nullable','in:1'],
+            // distribusi (OPSI) → HANYA dipakai kalau dikirim dari form
             'distribute_mode'            => ['nullable','in:all,selected'],
             'distribution_departments'   => ['array'],
             'distribution_departments.*' => ['uuid','exists:departments,id'],
+            'notes'                      => ['nullable','string'],   // VALIDASI CATATAN
         ]);
 
         $jenis = JenisDokumen::select('id','kode')->findOrFail($validated['document_type_id']);
@@ -321,13 +386,17 @@ class DocumentUploadController extends Controller
 
         $renumber = ($document->jenis_dokumen_id !== $jenis->id) || ($document->department_id !== $dept->id);
 
-        DB::transaction(function () use ($request, $validated, $document, $jenis, $dept, $newPath, $oldPath, $renumber) {
+        // Nilai boolean is_active dari form edit
+        $isActive = $request->has('is_active');
+
+        DB::transaction(function () use ($validated, $document, $jenis, $dept, $newPath, $oldPath, $renumber, $isActive) {
             $payload = [
                 'jenis_dokumen_id' => $jenis->id,
                 'department_id'    => $dept->id,
                 'name'             => $validated['document_name'],
                 'publish_date'     => $validated['publish_date'],
-                'is_active'        => $request->boolean('is_active', true),
+                'is_active'        => $isActive,
+                'notes'            => $validated['notes'] ?? null, // SIMPAN CATATAN
             ];
 
             if ($newPath) {
@@ -353,14 +422,26 @@ class DocumentUploadController extends Controller
                 Storage::disk('public')->delete($oldPath);
             }
 
-            // Distribusi (di UPDATE tetap pakai mode all/selected sesuai form edit)
-            $mode = $validated['distribute_mode'] ?? 'all';
-            if ($mode === 'all') {
-                $allDeptIds = Department::where('is_active', true)->pluck('id')->all();
-                $document->distributedDepartments()->sync($allDeptIds);
-            } else {
-                $selected = collect($validated['distribution_departments'] ?? [])->unique()->values()->all();
-                $document->distributedDepartments()->sync($selected);
+            // ============================
+            // DISTRIBUSI DI UPDATE:
+            // ============================
+            if (!empty($validated['distribute_mode'])) {
+                $mode = $validated['distribute_mode'];
+
+                if ($mode === 'all') {
+                    $allDeptIds = Department::where('is_active', true)->pluck('id')->all();
+                    $document->distributedDepartments()->sync($allDeptIds);
+                } else {
+                    $selected = collect($validated['distribution_departments'] ?? [])
+                        ->unique()->values()->all();
+
+                    if (!empty($selected)) {
+                        $document->distributedDepartments()->sync($selected);
+                    } else {
+                        // fallback: minimal departemen pemilik
+                        $document->distributedDepartments()->sync([$dept->id]);
+                    }
+                }
             }
         });
 
@@ -451,14 +532,13 @@ class DocumentUploadController extends Controller
                 ->with('error', 'Waktu akses dokumen sudah habis. Silakan ajukan permintaan akses lagi jika diperlukan.');
         }
 
-        $asDownload = request()->boolean('dl', false);
-
+        $asDownload   = request()->boolean('dl', false);
         $absolutePath = Storage::disk('public')->path($document->file_path);
         $setting      = WatermarkSetting::first();
         $useWatermark = $setting && $setting->enabled;
 
-        // Jika tidak ada watermark, file-kan langsung
-        if (!$useWatermark) {
+        // Helper kecil untuk kirim file tanpa watermark
+        $sendOriginal = function () use ($absolutePath, $asDownload) {
             $filename    = basename($absolutePath);
             $disposition = $asDownload ? 'attachment' : 'inline';
 
@@ -467,34 +547,49 @@ class DocumentUploadController extends Controller
                 'Content-Disposition' => $disposition.'; filename="'.$filename.'"',
                 'X-Accel-Buffering'   => 'no',
             ]);
+        };
+
+        // Jika tidak ada watermark, langsung kirim file asli
+        if (!$useWatermark) {
+            return $sendOriginal();
         }
 
-        // Render watermark on-the-fly
-        $pdf       = new Fpdi();
-        $pageCount = $pdf->setSourceFile($absolutePath);
+        // ==== MODE WATERMARK: coba pakai FPDI, kalau gagal → fallback ke file asli ====
+        try {
+            $pdf       = new Fpdi();
+            $pageCount = $pdf->setSourceFile($absolutePath);
 
-        for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
-            $tplId = $pdf->importPage($pageNo);
-            $size  = $pdf->getTemplateSize($tplId);
+            for ($pageNo = 1; $pageNo <= $pageCount; $pageNo++) {
+                $tplId = $pdf->importPage($pageNo);
+                $size  = $pdf->getTemplateSize($tplId);
 
-            $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
-            $pdf->useTemplate($tplId);
+                $pdf->AddPage($size['orientation'], [$size['width'], $size['height']]);
+                $pdf->useTemplate($tplId);
 
-            if ($setting->mode === 'image' && $setting->image_path) {
-                $this->applyImageWatermark($pdf, $setting, $size['width'], $size['height']);
-            } else {
-                $this->applyTextWatermark($pdf, $setting, $size['width'], $size['height'], $document);
+                if ($setting->mode === 'image' && $setting->image_path) {
+                    $this->applyImageWatermark($pdf, $setting, $size['width'], $size['height']);
+                } else {
+                    $this->applyTextWatermark($pdf, $setting, $size['width'], $size['height'], $document);
+                }
             }
+
+            $downloadName = basename($absolutePath);
+            $dest         = $asDownload ? 'D' : 'I'; // D = attachment, I = inline
+
+            return new StreamedResponse(function () use ($pdf, $downloadName, $dest) {
+                $pdf->Output($dest, $downloadName);
+            }, 200, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        } catch (\Throwable $e) {
+            // Jika FPDI gagal (mis. compression tidak didukung), log dan fallback ke file asli
+            Log::warning('FPDI gagal memproses PDF, fallback ke file asli tanpa watermark.', [
+                'document_id' => $document->id,
+                'message'     => $e->getMessage(),
+            ]);
+
+            return $sendOriginal();
         }
-
-        $downloadName = basename($absolutePath);
-        $dest         = $asDownload ? 'D' : 'I'; // D = attachment, I = inline
-
-        return new StreamedResponse(function () use ($pdf, $downloadName, $dest) {
-            $pdf->Output($dest, $downloadName);
-        }, 200, [
-            'Content-Type' => 'application/pdf',
-        ]);
     }
 
     // ================== HELPER: CEK AKSES DOKUMEN ==================

@@ -154,7 +154,7 @@
           <i class="mdi mdi-file-document-multiple-outline me-2"></i>
           Document Distribution
         </h3>
-        <p class="mb-0 opacity-90">Manage document distribution to divisions</p>
+        <p class="mb-0 opacity-90">Manage document distribution to divisions (multi document)</p>
       </div>
       <div class="search-box p-2">
         <form method="GET" action="{{ route('documents.distribution.index') }}" class="d-flex gap-2">
@@ -211,25 +211,27 @@
   <div class="card document-card mt-3">
     <div class="card-body p-4">
 
-      {{-- Document Selection --}}
+      {{-- Document Selection (multi) --}}
       <div class="mb-4">
         <h5 class="section-title">
           <i class="mdi mdi-file-search-outline me-2"></i>
-          Select Document
+          Select Documents
         </h5>
 
         <form method="GET" action="{{ route('documents.distribution.index') }}" id="formPickDoc">
           <div class="row align-items-end">
-            <div class="col-lg-10">
-              <label class="form-label fw-semibold">Choose Document</label>
+            <div class="col-12">
+              <label class="form-label fw-semibold">
+                Choose Documents <span class="text-muted small">(you can select more than one)</span>
+              </label>
               <select class="form-select select2"
-                      name="document_id"
+                      name="document_ids[]"
                       id="selectDocument"
-                      data-placeholder="Select a document..."
+                      multiple
+                      data-placeholder="Select one or more documents..."
                       style="min-width: 280px">
-                <option value=""></option>
                 @foreach($documents as $d)
-                  <option value="{{ $d->id }}" @selected($documentId === $d->id)>
+                  <option value="{{ $d->id }}" @selected(in_array($d->id, $selectedDocumentIds, true))>
                     {{ $d->document_number ?? '-' }} — {{ $d->name }}
                     @if(!is_null($d->revision))
                       (Rev {{ $d->revision }})
@@ -238,224 +240,241 @@
                 @endforeach
               </select>
             </div>
-
-            @if($documentId)
-              <div class="col-lg-2 mt-3 mt-lg-0">
-                <a href="{{ route('documents.distribution.index') }}"
-                   class="btn btn-outline-secondary w-100"
-                   title="Change document">
-                  <i class="mdi mdi-swap-horizontal me-1"></i> Change
-                </a>
-              </div>
-            @endif
           </div>
         </form>
       </div>
 
-      @if(! $selectedDoc)
+      @if($selectedDocs->isEmpty())
         {{-- Empty State --}}
         <div class="empty-state">
           <div class="empty-state-icon">
             <i class="mdi mdi-file-document-outline"></i>
           </div>
           <h5 class="text-muted">No Document Selected</h5>
-          <p class="text-muted">Please select a document from the dropdown above to manage its distribution.</p>
+          <p class="text-muted">Please select one or more documents from the dropdown above to manage their distributions.</p>
         </div>
       @else
-        {{-- Document Info Card --}}
-        <div class="info-card p-4 mb-4">
-          <div class="row align-items-center">
-            <div class="col-lg-8">
-              <h6 class="fw-bold mb-2">
-                <i class="mdi mdi-file-document me-1"></i> Selected Document
-              </h6>
-              <div class="mb-1">
-                <span class="badge bg-primary me-2">{{ $selectedDoc->document_number }}</span>
-                <strong>{{ $selectedDoc->name }}</strong>
+        {{-- Global statistics --}}
+        <div class="row mb-4">
+          <div class="col-md-4">
+            <div class="stat-card">
+              <div class="stat-icon bg-label-primary">
+                <i class="mdi mdi-file-document-multiple-outline"></i>
               </div>
-              <div class="small text-muted">
-                <i class="mdi mdi-calendar-outline me-1"></i>
-                Published:
-                {{ optional($selectedDoc->publish_date)->format('d M Y') ?? '-' }}
-                <span class="mx-2">•</span>
-                Status:
-                {!! $selectedDoc->is_active
-                     ? '<span class="badge bg-success">Active</span>'
-                     : '<span class="badge bg-danger">Inactive</span>' !!}
-                @if(!is_null($selectedDoc->revision))
-                  <span class="mx-2">•</span> Revision {{ $selectedDoc->revision }}
-                @endif
-              </div>
+              <div class="text-muted small text-uppercase">Selected Documents</div>
+              <div class="h3 fw-bold text-primary mb-0">{{ $selectedDocs->count() }}</div>
             </div>
-            <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
-              <div class="d-flex flex-column gap-2">
-                <div class="stat-card py-2">
-                  <div class="text-muted small">Total Divisi</div>
-                  <div class="h4 mb-0 fw-bold text-primary">{{ count($departments) }}</div>
-                </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stat-card">
+              <div class="stat-icon bg-label-info">
+                <i class="mdi mdi-office-building"></i>
+              </div>
+              <div class="text-muted small text-uppercase">Total Divisions</div>
+              <div class="h3 fw-bold text-info mb-0">{{ count($departments) }}</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="stat-card">
+              <div class="stat-icon bg-label-warning">
+                <i class="mdi mdi-account-group-outline"></i>
+              </div>
+              <div class="text-muted small text-uppercase">Total Doc-Div Combinations</div>
+              <div class="h3 fw-bold text-warning mb-0">
+                {{ $selectedDocs->count() * count($departments) }}
               </div>
             </div>
           </div>
         </div>
 
-        {{-- Distribution Form --}}
+        {{-- Distribution Form (for all selected docs) --}}
         <form method="POST" action="{{ route('documents.distribution.store') }}">
           @csrf
-          <input type="hidden" name="document_id" value="{{ $selectedDoc->id }}">
 
-          <div class="mb-4">
-            <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
-              <h5 class="section-title mb-0">
-                <i class="mdi mdi-office-building-outline me-2"></i>
-                Select Recipient Divisions
-              </h5>
+          {{-- hidden list of selected docs --}}
+          @foreach($selectedDocs as $doc)
+            <input type="hidden" name="document_ids[]" value="{{ $doc->id }}">
+          @endforeach
 
-              <div class="form-check form-switch">
-                <input class="form-check-input"
-                       type="checkbox"
-                       id="checkAllDeps"
-                       style="cursor: pointer;">
-                <label class="form-check-label fw-semibold"
-                       for="checkAllDeps"
-                       style="cursor: pointer;">
-                  Select All Divisions (except main)
-                </label>
-              </div>
+          <div class="mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <h5 class="section-title mb-0">
+              <i class="mdi mdi-office-building-outline me-2"></i>
+              Select Recipient Divisions Per Document
+            </h5>
+
+            <div class="form-check form-switch">
+              <input class="form-check-input"
+                     type="checkbox"
+                     id="checkAllDeps"
+                     style="cursor: pointer;">
+              <label class="form-check-label fw-semibold"
+                     for="checkAllDeps"
+                     style="cursor: pointer;">
+                Select All Divisions (except main) for all documents
+              </label>
             </div>
+          </div>
 
-            {{-- Statistics Row --}}
+          @foreach($selectedDocs as $doc)
             @php
-              $baseSelected = count($selectedDepartments);
-              $primaryId    = $selectedDoc->department_id ?? null;
-              if ($primaryId && ! in_array($primaryId, $selectedDepartments)) {
-                  $baseSelected++;
-              }
+              $primaryId      = $doc->department_id ?? null;
+              $selectedForDoc = $selectedDepartmentsByDoc[$doc->id] ?? [];
             @endphp
 
-            <div class="row mb-4">
-              <div class="col-md-4">
-                <div class="stat-card">
-                  <div class="stat-icon bg-label-primary">
-                    <i class="mdi mdi-office-building"></i>
+            {{-- Document Info Card --}}
+            <div class="info-card p-4 mb-3">
+              <div class="row align-items-center">
+                <div class="col-lg-8">
+                  <h6 class="fw-bold mb-2">
+                    <i class="mdi mdi-file-document me-1"></i> Document
+                  </h6>
+                  <div class="mb-1">
+                    <span class="badge bg-primary me-2">{{ $doc->document_number }}</span>
+                    <strong>{{ $doc->name }}</strong>
                   </div>
-                  <div class="text-muted small text-uppercase">Total Divisions</div>
-                  <div class="h3 fw-bold text-primary mb-0" id="totalDepts">{{ count($departments) }}</div>
+                  <div class="small text-muted">
+                    <i class="mdi mdi-calendar-outline me-1"></i>
+                    Published:
+                    {{ optional($doc->publish_date)->format('d M Y') ?? '-' }}
+                    <span class="mx-2">•</span>
+                    Status:
+                    {!! $doc->is_active
+                         ? '<span class="badge bg-success">Active</span>'
+                         : '<span class="badge bg-danger">Inactive</span>' !!}
+                    @if(!is_null($doc->revision))
+                      <span class="mx-2">•</span> Revision {{ $doc->revision }}
+                    @endif
+                  </div>
                 </div>
-              </div>
-              <div class="col-md-4">
-                <div class="stat-card">
-                  <div class="stat-icon bg-label-success">
-                    <i class="mdi mdi-check-circle"></i>
-                  </div>
-                  <div class="text-muted small text-uppercase">Selected</div>
-                  <div class="h3 fw-bold text-success mb-0" id="selectedCount">
-                    {{ $baseSelected }}
-                  </div>
-                </div>
-              </div>
-              <div class="col-md-4">
-                <div class="stat-card">
-                  <div class="stat-icon bg-label-warning">
-                    <i class="mdi mdi-clock-outline"></i>
-                  </div>
-                  <div class="text-muted small text-uppercase">Not Selected</div>
-                  <div class="h3 fw-bold text-warning mb-0" id="unselectedCount">
-                    {{ count($departments) - $baseSelected }}
-                  </div>
+                <div class="col-lg-4 text-lg-end mt-3 mt-lg-0">
+                  <span class="badge bg-label-info text-dark">
+                    Main Division:
+                    @if($primaryId && isset($departmentsById[$primaryId]))
+                      {{ $departmentsById[$primaryId]->name }}
+                    @else
+                      -
+                    @endif
+                  </span>
                 </div>
               </div>
             </div>
 
-            {{-- Division Grid --}}
-            <div class="row g-3" id="depsGrid">
-              @forelse($departments as $dep)
-                @php
-                  $isPrimary = $selectedDoc && $selectedDoc->department_id === $dep->id;
-                  $isChecked = $isPrimary || in_array($dep->id, $selectedDepartments);
-                @endphp
+            {{-- Division Grid for this document --}}
+            <div class="mb-4">
+              <div class="row g-3 deps-grid" data-doc-id="{{ $doc->id }}">
+                @forelse($departments as $dep)
+                  @php
+                    $isPrimary = $primaryId === $dep->id;
+                    $isChecked = $isPrimary || in_array($dep->id, $selectedForDoc, true);
+                  @endphp
 
-                <div class="col-md-6 col-lg-4 col-xl-3">
-                  <div class="dept-card p-3 {{ $isChecked ? 'selected' : '' }}" data-dept-id="{{ $dep->id }}">
-                    <div class="form-check mb-0">
-                      <input class="form-check-input dep-checkbox"
-                             type="checkbox"
-                             name="department_id[]"
-                             id="dep_{{ $dep->id }}"
-                             value="{{ $dep->id }}"
-                             @checked($isChecked)
-                             @if($isPrimary) disabled @endif
-                             data-primary="{{ $isPrimary ? '1' : '0' }}"
-                             style="cursor: pointer;">
+                  <div class="col-md-6 col-lg-4 col-xl-3">
+                    <div class="dept-card p-3 {{ $isChecked ? 'selected' : '' }}"
+                         data-doc-id="{{ $doc->id }}"
+                         data-dept-id="{{ $dep->id }}">
+                      <div class="form-check mb-0">
+                        <input class="form-check-input dep-checkbox"
+                               type="checkbox"
+                               name="distribution[{{ $doc->id }}][]"
+                               id="dep_{{ $doc->id }}_{{ $dep->id }}"
+                               value="{{ $dep->id }}"
+                               @checked($isChecked)
+                               @if($isPrimary) disabled @endif
+                               data-primary="{{ $isPrimary ? '1' : '0' }}"
+                               style="cursor: pointer;">
 
-                      {{-- hidden agar divisi utama tetap terkirim walaupun checkbox disabled --}}
-                      @if($isPrimary)
-                        <input type="hidden" name="department_id[]" value="{{ $dep->id }}">
-                      @endif
+                        {{-- hidden agar divisi utama tetap terkirim walaupun checkbox disabled --}}
+                        @if($isPrimary)
+                          <input type="hidden"
+                                 name="distribution[{{ $doc->id }}][]"
+                                 value="{{ $dep->id }}">
+                        @endif
 
-                      <label class="form-check-label w-100"
-                             for="dep_{{ $dep->id }}"
-                             style="cursor: pointer;">
-                        <div class="d-flex align-items-center justify-content-between">
-                          <div>
-                            <div class="fw-semibold">{{ $dep->name }}</div>
-                            <div class="small text-muted">
-                              @if($isPrimary)
-                                <i class="mdi mdi-star-outline text-warning"></i>
-                                Main Division
+                        <label class="form-check-label w-100"
+                               for="dep_{{ $doc->id }}_{{ $dep->id }}"
+                               style="cursor: pointer;">
+                          <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                              <div class="fw-semibold">{{ $dep->name }}</div>
+                              <div class="small text-muted">
+                                @if($isPrimary)
+                                  <i class="mdi mdi-star-outline text-warning"></i>
+                                  Main Division
+                                @else
+                                  <i class="mdi mdi-account-multiple-outline"></i>
+                                  Additional Division
+                                @endif
+                              </div>
+                            </div>
+                            <div class="ms-2">
+                              @if($isChecked)
+                                <span class="badge bg-success rounded-pill">
+                                  <i class="mdi mdi-check"></i>
+                                </span>
                               @else
-                                <i class="mdi mdi-account-multiple-outline"></i>
-                                Additional Division
+                                <span class="badge bg-light text-muted rounded-pill">
+                                  <i class="mdi mdi-plus"></i>
+                                </span>
                               @endif
                             </div>
                           </div>
-                          <div class="ms-2">
-                            @if($isChecked)
-                              <span class="badge bg-success rounded-pill">
-                                <i class="mdi mdi-check"></i>
-                              </span>
-                            @else
-                              <span class="badge bg-light text-muted rounded-pill">
-                                <i class="mdi mdi-plus"></i>
-                              </span>
-                            @endif
-                          </div>
-                        </div>
-                      </label>
+                        </label>
+                      </div>
                     </div>
                   </div>
-                </div>
-              @empty
-                <div class="col-12">
-                  <div class="empty-state py-5">
-                    <div class="empty-state-icon">
-                      <i class="mdi mdi-office-building-outline"></i>
+                @empty
+                  <div class="col-12">
+                    <div class="empty-state py-5">
+                      <div class="empty-state-icon">
+                        <i class="mdi mdi-office-building-outline"></i>
+                      </div>
+                      <h5 class="text-muted">No Divisions Available</h5>
+                      <p class="text-muted">There are no divisions in the system yet.</p>
                     </div>
-                    <h5 class="text-muted">No Divisions Available</h5>
-                    <p class="text-muted">There are no divisions in the system yet.</p>
                   </div>
-                </div>
-              @endforelse
+                @endforelse
+              </div>
             </div>
-          </div>
+          @endforeach
 
           {{-- Action Buttons --}}
           <div class="pt-4 border-top">
-            <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center">
+            <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start align-items-md-center">
               <div class="text-muted small">
                 <i class="mdi mdi-information-outline me-1"></i>
-                Main division of the document is always included and cannot be unselected.
+                For each document, its main division is always included and cannot be unselected.
               </div>
-              <div class="d-flex gap-2">
-                <a href="{{ route('documents.distribution.index', ['document_id' => $selectedDoc->id]) }}"
-                   class="btn btn-outline-secondary action-btn"
-                   title="Reset distribution settings">
-                  <i class="mdi mdi-refresh me-1"></i> Reset
-                </a>
-                <button type="submit"
-                        class="btn btn-primary action-btn"
-                        title="Save distribution settings">
-                  <i class="mdi mdi-content-save-outline me-1"></i> Save Distribution
-                </button>
+
+              <div class="d-flex flex-column flex-md-row gap-3 align-items-stretch align-items-md-center">
+                {{-- Toggle Kirim WA --}}
+                <div class="form-check form-switch">
+                  <input class="form-check-input"
+                         type="checkbox"
+                         id="send_whatsapp"
+                         name="send_whatsapp"
+                         value="1"
+                         checked>
+                  <label class="form-check-label" for="send_whatsapp">
+                    Kirim notifikasi WhatsApp
+                    <span class="text-muted small d-block">
+                      Nonaktifkan jika hanya ingin menyimpan distribusi di sistem.
+                    </span>
+                  </label>
+                </div>
+
+                {{-- Buttons --}}
+                <div class="d-flex gap-2 justify-content-end">
+                  <a href="{{ route('documents.distribution.index', ['document_ids' => $selectedDocumentIds]) }}"
+                     class="btn btn-outline-secondary action-btn"
+                     title="Reset distribution settings (reload current selection)">
+                    <i class="mdi mdi-refresh me-1"></i> Reset
+                  </a>
+                  <button type="submit"
+                          class="btn btn-primary action-btn"
+                          title="Save distribution settings for all selected documents">
+                    <i class="mdi mdi-content-save-outline me-1"></i> Save Distribution
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -484,52 +503,38 @@
         $el.select2({
           theme: 'bootstrap-5',
           width: '100%',
-          placeholder: $el.data('placeholder') || 'Select a document...',
+          placeholder: $el.data('placeholder') || 'Select one or more documents...',
           allowClear: true,
           dropdownParent: $el.closest('.card')
         });
 
+        // Submit form ketika pilihan dokumen berubah
         $el.on('change', function () {
           document.getElementById('formPickDoc').submit();
         });
       }
     }
 
-    // Update counter dan visual feedback
-    function updateCounters() {
-      const depBoxes = Array.from(document.querySelectorAll('.dep-checkbox'));
-      const checked  = depBoxes.filter(cb => cb.checked).length;
-      const total    = depBoxes.length;
-      const unchecked = total - checked;
+    function updateCardVisualForCheckbox(cb) {
+      const card  = cb.closest('.dept-card');
+      if (!card) return;
+      const badge = card.querySelector('.badge');
 
-      const selectedCountEl   = document.getElementById('selectedCount');
-      const unselectedCountEl = document.getElementById('unselectedCount');
-
-      if (selectedCountEl) selectedCountEl.textContent = checked;
-      if (unselectedCountEl) unselectedCountEl.textContent = unchecked;
-
-      // Update visual card state
-      depBoxes.forEach(cb => {
-        const card  = cb.closest('.dept-card');
-        const badge = card.querySelector('.badge');
-
-        if (cb.checked) {
-          card.classList.add('selected');
-          if (badge) {
-            badge.className = 'badge bg-success rounded-pill';
-            badge.innerHTML = '<i class="mdi mdi-check"></i>';
-          }
-        } else {
-          card.classList.remove('selected');
-          if (badge) {
-            badge.className = 'badge bg-light text-muted rounded-pill';
-            badge.innerHTML = '<i class="mdi mdi-plus"></i>';
-          }
+      if (cb.checked) {
+        card.classList.add('selected');
+        if (badge) {
+          badge.className = 'badge bg-success rounded-pill';
+          badge.innerHTML = '<i class="mdi mdi-check"></i>';
         }
-      });
+      } else {
+        card.classList.remove('selected');
+        if (badge) {
+          badge.className = 'badge bg-light text-muted rounded-pill';
+          badge.innerHTML = '<i class="mdi mdi-plus"></i>';
+        }
+      }
     }
 
-    // Check All functionality
     function initCheckAll() {
       const master   = document.getElementById('checkAllDeps');
       const depBoxes = Array.from(document.querySelectorAll('.dep-checkbox'));
@@ -537,51 +542,30 @@
 
       const normalBoxes = depBoxes.filter(cb => cb.dataset.primary !== '1');
 
-      function refreshMasterState() {
-        const total   = normalBoxes.length;
-        const checked = normalBoxes.filter(cb => cb.checked).length;
-
-        if (total === 0) {
-          master.checked       = true;
-          master.indeterminate = false;
-          master.disabled      = true;
-        } else if (checked === 0) {
-          master.checked       = false;
-          master.indeterminate = false;
-          master.disabled      = false;
-        } else if (checked === total) {
-          master.checked       = true;
-          master.indeterminate = false;
-          master.disabled      = false;
-        } else {
-          master.checked       = false;
-          master.indeterminate = true;
-          master.disabled      = false;
-        }
-
-        updateCounters();
-      }
-
       master.addEventListener('change', function() {
         const targetChecked = master.checked;
         normalBoxes.forEach(cb => {
           cb.checked = targetChecked;
+          updateCardVisualForCheckbox(cb);
         });
-        master.indeterminate = false;
-        updateCounters();
       });
 
+      // Update visual ketika checkbox individual di-klik
       depBoxes.forEach(cb => {
-        cb.addEventListener('change', refreshMasterState);
+        cb.addEventListener('change', function () {
+          updateCardVisualForCheckbox(cb);
+        });
       });
-
-      refreshMasterState();
     }
 
     document.addEventListener('DOMContentLoaded', function() {
       initSelect2();
       initCheckAll();
-      updateCounters();
+
+      // Initial visual state
+      document.querySelectorAll('.dep-checkbox').forEach(cb => {
+        updateCardVisualForCheckbox(cb);
+      });
     });
   })();
 </script>

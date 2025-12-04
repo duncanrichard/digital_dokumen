@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Concerns\HasUuids; // Laravel 9+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -15,16 +15,9 @@ class Document extends Model
 
     protected $table = 'documents';
 
-    /**
-     * PK = UUID string
-     */
     public $incrementing = false;
     protected $keyType   = 'string';
 
-    /**
-     * Kolom yang boleh di-mass assign.
-     * (JANGAN masukkan 'id' — UUID digenerate otomatis)
-     */
     protected $fillable = [
         'jenis_dokumen_id',
         'department_id',
@@ -35,7 +28,8 @@ class Document extends Model
         'file_path',
         'is_active',
         'revision',
-        'read_notifikasi', // <— penting untuk notifikasi
+        'read_notifikasi',
+        'notes',          // <-- TAMBAH INI
     ];
 
     protected $casts = [
@@ -44,11 +38,11 @@ class Document extends Model
         'read_notifikasi'  => 'boolean',
         'revision'         => 'integer',
         'sequence'         => 'integer',
+        'notes'            => 'string', // opsional, biar konsisten
     ];
 
-    /* =======================
-     * RELATIONS
-     * ======================= */
+    // ... sisanya tetap seperti semula ...
+
     public function jenisDokumen()
     {
         return $this->belongsTo(JenisDokumen::class, 'jenis_dokumen_id');
@@ -59,7 +53,6 @@ class Document extends Model
         return $this->belongsTo(Department::class, 'department_id');
     }
 
-    // Ke tabel pivot — daftar departemen penerima distribusi
     public function distributedDepartments()
     {
         return $this->belongsToMany(
@@ -70,20 +63,14 @@ class Document extends Model
         )->withTimestamps();
     }
 
-    // Jika butuh akses langsung ke baris pivot
     public function distributions()
     {
         return $this->hasMany(DocumentDistribution::class, 'document_id', 'id');
     }
 
-    /* =======================
-     * SCOPES (membantu query)
-     * ======================= */
     public function scopeSearch(Builder $q, ?string $term): Builder
     {
         if (!$term) return $q;
-
-        // ILIKE untuk Postgres agar case-insensitive
         $driver = $q->getModel()->getConnection()->getDriverName();
         $like   = $driver === 'pgsql' ? 'ILIKE' : 'LIKE';
 
@@ -109,31 +96,41 @@ class Document extends Model
                  ->orderByDesc('created_at');
     }
 
-    /* =======================
-     * ACCESSORS / VIRTUAL ATTR
-     * ======================= */
-
-    /**
-     * URL file untuk ditampilkan (jika pakai disk 'public').
-     */
     public function getFileUrlAttribute(): ?string
     {
         if (!$this->file_path) return null;
 
-        // Jika sudah absolute URL, kembalikan apa adanya
         if (Str::startsWith($this->file_path, ['http://', 'https://'])) {
             return $this->file_path;
         }
 
-        // Jika path storage (mis. documents/xxx.pdf)
         return Storage::url($this->file_path);
     }
 
-    /**
-     * Nomor tampil: "<document_number> R<revision>"
-     */
     public function getDisplayNumberAttribute(): string
     {
         return "{$this->document_number} R{$this->revision}";
+    }
+
+    // Dokumen ini DIUBAH MENJADI dokumen lain (dokumen baru)
+    public function changedToDocuments()
+    {
+        return $this->belongsToMany(
+            self::class,
+            'document_relations',
+            'parent_document_id',
+            'child_document_id'
+        )->withPivot('relation_type')->withTimestamps();
+    }
+
+    // Dokumen ini HASIL PERUBAHAN dari dokumen lain
+    public function changedFromDocuments()
+    {
+        return $this->belongsToMany(
+            self::class,
+            'document_relations',
+            'child_document_id',
+            'parent_document_id'
+        )->withPivot('relation_type')->withTimestamps();
     }
 }

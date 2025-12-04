@@ -40,6 +40,31 @@
   .empty-state { padding: 3rem 1rem; text-align: center; }
   .empty-state i { font-size: 4rem; color: #dee2e6; margin-bottom: 1rem; }
 
+  /* ===== RAPIKAN DOCUMENT NAME + "DIUBAH DARI" ===== */
+  .doc-name-main {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #2c3e50;
+  }
+
+  .doc-name-meta {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-top: 0.2rem;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .25rem;
+  }
+
+  .doc-name-meta-label {
+    font-weight: 500;
+  }
+
+  .doc-name-meta-number {
+    font-family: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+
   @media (max-width: 768px) {
     .doc-number { min-width: 100%; margin-bottom: 0.5rem; }
     .doc-meta { margin-left: 0; width: 100%; justify-content: flex-start; }
@@ -58,9 +83,14 @@
   $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
 
   // Permission berdasarkan ROLE (bukan $user->can())
-  $canCreate = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.create'));
-  $canUpdate = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.update'));
-  $canDelete = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.delete'));
+  // Dibedakan:
+  // - $canCreateNew     : tombol "Add Document" + modal create
+  // - $canChangeToNew   : aksi "Di Ubah" + modal change
+  $canCreateNew   = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.create'));
+  $canUpdate      = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.update'));
+  $canDelete      = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.delete'));
+
+  $canChangeToNew = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.change'));
 @endphp
 
 <div class="row gy-4">
@@ -90,7 +120,7 @@
             <p class="text-muted mb-0 small">Managed controlled documents & company assets</p>
           </div>
 
-          @if($canCreate)
+          @if($canCreateNew)
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal" id="btnOpenCreate">
               <i class="mdi mdi-plus me-1"></i> Add Document
             </button>
@@ -200,12 +230,18 @@
                           <tr>
                             <th class="col-idx text-center">#</th>
                             <th class="text-center">Revision</th>
-                            <th>Document Name</th>
+                            <th class="text-center text-nowrap">Document Name</th>
                             <th class="text-center">Type</th>
                             <th class="text-center">Divisi</th>
-                            <th class="text-center">Publish Date</th>
+                            <th class="text-center text-nowrap">Publish Date</th>
+                            {{-- STATUS MURNI ACTIVE/INACTIVE --}}
                             <th class="text-center">Status</th>
+                            {{-- KOLOM BARU UNTUK INFORMASI PERUBAHAN DOKUMEN --}}
+                            <th class="text-center">Perubahan</th>
                             <th class="text-center">File</th>
+                            @if($canChangeToNew)
+                              <th class="text-center">Di Ubah</th>
+                            @endif
                             @if($canUpdate || $canDelete)
                               <th class="col-aksi text-center">Actions</th>
                             @endif
@@ -213,6 +249,11 @@
                         </thead>
                         <tbody>
                           @foreach($sorted as $row)
+                            @php
+                              // Relasi perubahan
+                              $changedFrom = $row->changedFromDocuments->first();
+                              $changedTo   = $row->changedToDocuments->first();
+                            @endphp
                             <tr>
                               <td class="text-center text-muted small">
                                 {{ $items->firstItem() + $loop->parent->index + $loop->index }}
@@ -224,7 +265,22 @@
                                 </span>
                               </td>
 
-                              <td><div class="fw-semibold">{{ $row->name }}</div></td>
+                              {{-- ===== DOCUMENT NAME + INFO "DIUBAH DARI" ===== --}}
+                             <td class="text-nowrap">
+                                <div class="doc-name-main">
+                                  {{ $row->name }}
+                                </div>
+
+                                @if($changedFrom)
+                                  <div class="doc-name-meta">
+                                    <span class="doc-name-meta-label">Diubah dari:</span>
+                                    <a href="{{ route('documents.file', $changedFrom->id) }}"
+                                       class="doc-name-meta-number text-decoration-none">
+                                      {{ $changedFrom->display_number ?? ($changedFrom->document_number.' R'.$changedFrom->revision) }}
+                                    </a>
+                                  </div>
+                                @endif
+                              </td>
 
                               <td class="text-center">
                                 <span class="badge bg-light text-dark border">{{ $row->jenisDokumen->kode ?? '' }}</span>
@@ -238,6 +294,7 @@
                                 {{ \Carbon\Carbon::parse($row->publish_date)->format('d M Y') }}
                               </td>
 
+                              {{-- STATUS HANYA ACTIVE / INACTIVE --}}
                               <td class="text-center">
                                 @if($row->is_active)
                                   <span class="badge status-badge bg-success text-white rounded-pill">
@@ -250,6 +307,21 @@
                                 @endif
                               </td>
 
+                              {{-- KOLOM: PERUBAHAN (DIUBAH KE DOKUMEN NOMOR ...) --}}
+                              <td class="text-center">
+                                @if($changedTo)
+                                  <a href="{{ route('documents.file', $changedTo->id) }}"
+                                     class="badge bg-warning text-dark rounded-pill"
+                                     title="Lihat dokumen baru">
+                                    <i class="mdi mdi-link-variant me-1"></i>
+                                    {{ $changedTo->display_number ?? ($changedTo->document_number.' R'.$changedTo->revision) }}
+                                  </a>
+                                @else
+                                  <span class="text-muted small">-</span>
+                                @endif
+                              </td>
+
+                              {{-- KOLOM FILE (VIEW) --}}
                               <td class="text-center">
                                 <div class="btn-group btn-group-sm" role="group">
                                   {{-- VIEW -> ke gate stream() --}}
@@ -258,16 +330,27 @@
                                      title="View">
                                     <i class="mdi mdi-eye"></i>
                                   </a>
-
-                                  {{-- DOWNLOAD -> langsung ke rawFile, gunakan dl=1 --}}
-                                  <a href="{{ route('documents.file.raw', [$row->id, 'dl' => 1]) }}"
-                                     class="btn btn-outline-secondary btn-action"
-                                     title="Download">
-                                    <i class="mdi mdi-download"></i>
-                                  </a>
                                 </div>
                               </td>
 
+                              {{-- KOLOM BARU: BUTTON "Di Ubah" --}}
+                              @if($canChangeToNew)
+                                <td class="text-center">
+                                  <button type="button"
+                                          class="btn btn-sm btn-outline-warning btn-change-document"
+                                          data-source_id="{{ $row->id }}"
+                                          data-document_type_id="{{ $row->jenis_dokumen_id }}"
+                                          data-department_id="{{ $row->department_id }}"
+                                          data-name="{{ $row->name }}"
+                                          data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
+                                          data-notes="{{ $row->notes ?? '' }}">
+                                    <i class="mdi mdi-file-replace-outline me-1"></i>
+                                    Ubah
+                                  </button>
+                                </td>
+                              @endif
+
+                              {{-- DROPDOWN ACTIONS (EDIT & DELETE SAJA) --}}
                               @if($canUpdate || $canDelete)
                                 <td class="text-center">
                                   <div class="dropdown">
@@ -286,6 +369,7 @@
                                              data-name="{{ $row->name }}"
                                              data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
                                              data-is_active="{{ $row->is_active ? 1 : 0 }}"
+                                             data-notes="{{ $row->notes ?? '' }}"
                                              data-bs-toggle="modal" data-bs-target="#editModal">
                                             <i class="mdi mdi-pencil-outline me-2"></i> Edit
                                           </a>
@@ -339,7 +423,7 @@
 </div>
 
 {{-- ================== CREATE MODAL (Hanya untuk dokumen baru) ================== --}}
-@if($canCreate)
+@if($canCreateNew)
 <div class="modal fade" id="createModal" tabindex="-1" aria-labelledby="createModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content shadow-lg rounded-3">
@@ -444,6 +528,123 @@
 </div>
 @endif
 
+{{-- ================== CHANGE MODAL (Di Ubah) ================== --}}
+@if($canChangeToNew)
+<div class="modal fade" id="changeModal" tabindex="-1" aria-labelledby="changeModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content shadow-lg rounded-3">
+      <form method="post" action="{{ route('documents.store') }}" enctype="multipart/form-data" id="formChange">
+        @csrf
+        <input type="hidden" name="_from" value="change">
+        <input type="hidden" name="change_of" id="change_of" value="">
+
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-semibold" id="changeModalLabel">Di Ubah</h5>
+          <button type="button" class="btn btn-icon btn-text-secondary" data-bs-dismiss="modal" aria-label="Close">
+            <i class="mdi mdi-close"></i>
+          </button>
+        </div>
+
+        <div class="modal-body pt-0">
+          @if ($errors->any() && old('_from')==='change')
+            <div class="alert alert-danger">
+              <i class="mdi mdi-alert-circle-outline me-1"></i> Gagal menyimpan. Periksa kembali:
+              <ul class="mb-0 mt-2 ps-3">
+                @foreach ($errors->all() as $err) <li>{{ $err }}</li> @endforeach
+              </ul>
+            </div>
+          @endif
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label required">Document Type</label>
+              <select class="form-select select2 @error('document_type_id') is-invalid @enderror"
+                      name="document_type_id" id="change_document_type_id"
+                      data-placeholder="Select Document" required>
+                <option value=""></option>
+                @foreach($documentTypes as $dt)
+                  <option value="{{ $dt->id }}" {{ old('_from')==='change' && old('document_type_id')===$dt->id ? 'selected' : '' }}>
+                    {{ $dt->kode }} - {{ $dt->nama }}
+                  </option>
+                @endforeach
+              </select>
+              @error('document_type_id') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-md-6 mb-3">
+              <label class="form-label required">Divisi</label>
+              <select class="form-select select2 @error('department_id') is-invalid @enderror"
+                      name="department_id" id="change_department_id"
+                      data-placeholder="Select Division" required>
+                <option value=""></option>
+                @foreach($departments as $dep)
+                  <option value="{{ $dep->id }}" {{ old('_from')==='change' && old('department_id')===$dep->id ? 'selected' : '' }}>
+                    {{ $dep->code }} - {{ $dep->name }}
+                  </option>
+                @endforeach
+              </select>
+              @error('department_id') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label required">Document Name</label>
+            <input type="text" class="form-control @error('document_name') is-invalid @enderror"
+                   name="document_name" id="change_name"
+                   value="{{ old('_from')==='change' ? old('document_name') : '' }}"
+                   placeholder="Document Name" required>
+            @error('document_name') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label required">Publish Date</label>
+            <input type="date" class="form-control @error('publish_date') is-invalid @enderror"
+                   name="publish_date" id="change_publish_date"
+                   value="{{ old('_from')==='change' ? old('publish_date') : '' }}"
+                   required>
+            @error('publish_date') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+          </div>
+
+          {{-- CATATAN UNTUK MODAL DI UBAH --}}
+          <div class="mb-3">
+            <label class="form-label">Catatan</label>
+            <textarea class="form-control @error('notes') is-invalid @enderror"
+                      name="notes" id="change_notes"
+                      rows="3"
+                      placeholder="Catatan perubahan (opsional)">{{ old('_from')==='change' ? old('notes') : '' }}</textarea>
+            @error('notes') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label required">Upload Document (PDF)</label>
+            <input type="file" class="form-control @error('file') is-invalid @enderror"
+                   name="file" accept="application/pdf,.pdf" required>
+            @error('file') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            <small class="text-muted">PDF only. Max 10MB.</small>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label d-block">Status</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="change_is_active" name="is_active" value="1"
+                     {{ old('_from')==='change' ? (old('is_active') ? 'checked' : 'checked') : 'checked' }}>
+              <label class="form-check-label" for="change_is_active">Active</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 d-flex justify-content-end">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="mdi mdi-content-save-outline"></i> Simpan Dokumen Baru
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endif
+
 {{-- ================== EDIT MODAL ================== --}}
 @if($canUpdate)
 <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
@@ -501,6 +702,16 @@
             <label class="form-label required">Publish Date</label>
             <input type="date" class="form-control" name="publish_date" id="edit_publish_date"
                    value="{{ old('_from')==='edit' ? old('publish_date') : '' }}" required>
+          </div>
+
+          {{-- CATATAN UNTUK MODAL EDIT --}}
+          <div class="mb-3">
+            <label class="form-label">Catatan</label>
+            <textarea class="form-control @error('notes') is-invalid @enderror"
+                      name="notes" id="edit_notes"
+                      rows="3"
+                      placeholder="Catatan tambahan (opsional)">{{ old('_from')==='edit' ? old('notes') : '' }}</textarea>
+            @error('notes') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
           </div>
 
           <div class="mb-3">
@@ -580,6 +791,10 @@
         initSelect2(this);
       });
 
+      $('#changeModal').on('shown.bs.modal', function () {
+        initSelect2(this);
+      });
+
       // Auto-open CREATE modal if validation fails (mode create only)
       @if ($errors->any() && old('_from')==='create')
         const cm = document.getElementById('createModal');
@@ -587,6 +802,26 @@
           const bsModal = new bootstrap.Modal(cm);
           bsModal.show();
           setTimeout(() => { initSelect2(cm); }, 150);
+        }
+      @endif
+
+      // Auto-open CHANGE modal if validation failed on change
+      @if ($errors->any() && old('_from')==='change')
+        const chm = document.getElementById('changeModal');
+        if (chm) {
+          const bsModal = new bootstrap.Modal(chm);
+          bsModal.show();
+          setTimeout(() => { initSelect2(chm); }, 150);
+        }
+      @endif
+
+      // Auto-open EDIT modal if validation failed on update
+      @if ($errors->any() && old('_from')==='edit')
+        const em = document.getElementById('editModal');
+        if (em) {
+          const bsModal = new bootstrap.Modal(em);
+          bsModal.show();
+          setTimeout(() => { initSelect2(em); }, 150);
         }
       @endif
 
@@ -605,6 +840,7 @@
         };
         setVal('edit_name', btn.data('name'));
         setVal('edit_publish_date', btn.data('publish_date'));
+        setVal('edit_notes', btn.data('notes') || '');
 
         $('#edit_document_type_id').val(btn.data('document_type_id') || '').trigger('change');
         $('#edit_department_id').val(btn.data('department_id') || '').trigger('change');
@@ -619,6 +855,37 @@
         setTimeout(() => { initSelect2(modal); }, 100);
       });
 
+      // Handler: Di Ubah (kolom sendiri)
+      $(document).on('click', '.btn-change-document', function(e) {
+        e.preventDefault();
+        const btn = $(this);
+        const form = document.getElementById('formChange');
+        if (!form) return;
+
+        // set hidden "change_of"
+        $('#change_of').val(btn.data('source_id') || '');
+
+        const setVal = (id, val) => {
+          const el = document.getElementById(id);
+          if (el) el.value = val ?? '';
+        };
+
+        setVal('change_name', btn.data('name'));
+        setVal('change_publish_date', btn.data('publish_date'));
+        setVal('change_notes', btn.data('notes') || '');
+
+        $('#change_document_type_id').val(btn.data('document_type_id') || '').trigger('change');
+        $('#change_department_id').val(btn.data('department_id') || '').trigger('change');
+
+        const chk = document.getElementById('change_is_active');
+        if (chk) chk.checked = true;
+
+        const modal = document.getElementById('changeModal');
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        setTimeout(() => { initSelect2(modal); }, 100);
+      });
+
       // Add new (reset form)
       $('#btnOpenCreate').on('click', function() {
         const form = document.getElementById('formCreate');
@@ -627,16 +894,6 @@
         $('#create_document_type_id').val('').trigger('change');
         $('#create_department_id').val('').trigger('change');
       });
-
-      // Auto-open EDIT modal if validation failed on update
-      @if ($errors->any() && old('_from')==='edit')
-        const em = document.getElementById('editModal');
-        if (em) {
-          const bsModal = new bootstrap.Modal(em);
-          bsModal.show();
-          setTimeout(() => { initSelect2(em); }, 150);
-        }
-      @endif
 
       // Delete
       $(document).on('click', '.btn-delete-document', function(e) {
