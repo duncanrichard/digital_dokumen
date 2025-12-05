@@ -211,6 +211,13 @@
                         @if($latest->is_active)
                           <span class="badge bg-success badge-round">Active</span>
                         @endif
+
+                        {{-- BADGE NEW: kalau versi terbaru belum dibaca (read_notifikasi = 0) --}}
+                        @if(!$latest->read_notifikasi)
+                          <span class="badge bg-danger badge-round">
+                            <i class="mdi mdi-bell-ring-outline me-1"></i> New
+                          </span>
+                        @endif
                       </div>
                       <div class="doc-meta d-none d-lg-flex">
                         <span><i class="mdi mdi-folder-outline me-1"></i>{{ $latest->jenisDokumen->nama ?? '—' }}</span>

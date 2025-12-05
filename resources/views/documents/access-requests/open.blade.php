@@ -80,7 +80,10 @@
           <p class="mb-1">
             Jendela baru yang berisi PDF sudah dibuka (jika tidak muncul, periksa pop-up blocker browser Anda).
           </p>
-          <a href="{{ route('documents.file.raw', $document->id) }}" target="_blank" class="btn btn-primary">
+          <a id="btnOpenPdf"
+             href="{{ route('documents.file.raw', $document->id) }}"
+             target="_blank"
+             class="btn btn-primary">
             <i class="mdi mdi-open-in-new me-1"></i> Buka PDF di Tab Baru
           </a>
         </div>
@@ -126,6 +129,16 @@
     // Buka PDF di tab baru (kalau browser mengizinkan) dan simpan handlenya
     let pdfWindow = window.open(rawUrl, '_blank');
 
+    // Hubungkan tombol "Buka PDF di Tab Baru" dengan pdfWindow,
+    // supaya kalau user klik manual, tab itu juga bisa ditutup saat waktu habis.
+    const openBtn = document.getElementById('btnOpenPdf');
+    if (openBtn) {
+      openBtn.addEventListener('click', function (e) {
+        e.preventDefault(); // cegah behaviour default agar kita bisa simpan handle-nya
+        pdfWindow = window.open(rawUrl, '_blank');
+      });
+    }
+
     // Kalau tidak ada timer (akses tanpa batas waktu), tidak perlu JS lanjutan
     @if(empty($remainingSeconds) || $remainingSeconds <= 0)
       return;
@@ -164,19 +177,23 @@
           // abaikan error (misal cross-origin / browser block)
         }
 
-        // Tampilkan modal Bootstrap, lalu kembali ke Library Dokumen
+        // Tampilkan modal Bootstrap TANPA refresh / redirect halaman
         if (typeof bootstrap !== 'undefined' && modalEl) {
-          const expiredModal = new bootstrap.Modal(modalEl);
+          const expiredModal = new bootstrap.Modal(modalEl, {
+            backdrop: 'static',
+            keyboard: false
+          });
           expiredModal.show();
 
           if (btnExpiredOk) {
             btnExpiredOk.onclick = function () {
-              window.location.href = @json(route('documents.index'));
+              // Hanya tutup modal, tidak pindah halaman
+              expiredModal.hide();
             };
           }
         } else {
           // Fallback kalau bootstrap JS tidak tersedia
-          window.location.href = @json(route('documents.index'));
+          alert('Waktu akses dokumen Anda sudah habis. Silakan ajukan permintaan akses lagi jika diperlukan.');
         }
 
         return;

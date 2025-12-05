@@ -36,8 +36,8 @@ use App\Http\Controllers\System\FrameworkController;
 | Web Routes
 |--------------------------------------------------------------------------
 |
-| - Halaman login dijadikan root ('/') dan hanya bisa diakses guest.
-| - Semua halaman aplikasi wajib auth.
+| - Halaman login dijadikan root ('/') dan hanya bisa diakses guest (guard web).
+| - Semua halaman aplikasi wajib auth (guard web).
 |
 */
 
@@ -47,10 +47,10 @@ $UUID_REGEX   = '[0-9a-fA-F-]{36}';
 
 /*
 |--------------------------------------------------------------------------
-| AUTH (guest)
+| AUTH (guest:web)
 |--------------------------------------------------------------------------
 */
-Route::middleware('guest')->group(function () {
+Route::middleware('guest:web')->group(function () {
     // root → login
     Route::get('/', [LoginBasic::class, 'index'])->name('login');
 
@@ -60,10 +60,10 @@ Route::middleware('guest')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| AUTH (authenticated)
+| AUTH (auth:web)
 |--------------------------------------------------------------------------
 */
-Route::middleware('auth')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
+Route::middleware('auth:web')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
 
     /*
     |--------------------------------------------------------------------------
