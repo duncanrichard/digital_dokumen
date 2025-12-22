@@ -94,6 +94,15 @@ class DocumentUploadController extends Controller
         });
     }
 
+    /**
+     * ✅ Tambahan: Helper untuk bikin sequence tampil 01, 02, 03, ...
+     * (sequence di database tetap angka 1,2,3 agar max('sequence') aman)
+     */
+    protected function formatSequence(int $seq, int $pad = 2): string
+    {
+        return str_pad((string) $seq, $pad, '0', STR_PAD_LEFT);
+    }
+
     // ================== LIST / FILTER ==================
     public function index(Request $request)
     {
@@ -263,7 +272,9 @@ class DocumentUploadController extends Controller
             ->max('sequence');
         $nextSequence = $nextSequence ? $nextSequence + 1 : 1;
 
-        $documentNumber = "{$jenis->kode}-{$dept->code}/{$nextSequence}/{$year}";
+        // ✅ Perubahan: sequence di nomor dokumen jadi 2 digit
+        $seqFormatted  = $this->formatSequence($nextSequence, 2);
+        $documentNumber = "{$jenis->kode}-{$dept->code}/{$seqFormatted}/{$year}";
 
         DB::transaction(function () use (
             $validated,
@@ -279,8 +290,8 @@ class DocumentUploadController extends Controller
             $doc = Document::create([
                 'jenis_dokumen_id' => $jenis->id,
                 'department_id'    => $dept->id,
-                'sequence'         => $nextSequence,
-                'document_number'  => $documentNumber,
+                'sequence'         => $nextSequence,     // tetap angka
+                'document_number'  => $documentNumber,   // tampil 01,02,...
                 'revision'         => 0,
                 'name'             => $validated['document_name'],
                 'publish_date'     => $validated['publish_date'],
@@ -411,8 +422,11 @@ class DocumentUploadController extends Controller
                     ->max('sequence');
                 $nextSequence = $nextSequence ? $nextSequence + 1 : 1;
 
-                $payload['sequence']        = $nextSequence;
-                $payload['document_number'] = "{$jenis->kode}-{$dept->code}/{$nextSequence}/{$year}";
+                // ✅ Perubahan: sequence di nomor dokumen jadi 2 digit
+                $seqFormatted = $this->formatSequence($nextSequence, 2);
+
+                $payload['sequence']        = $nextSequence; // tetap angka
+                $payload['document_number'] = "{$jenis->kode}-{$dept->code}/{$seqFormatted}/{$year}";
                 $payload['revision']        = 0;
             }
 
@@ -593,17 +607,6 @@ class DocumentUploadController extends Controller
     }
 
     // ================== HELPER: CEK AKSES DOKUMEN ==================
-    /**
-     * @param  \App\Models\Document  $document
-     * @param  bool  $createPending  true = boleh buat request pending baru,
-     *                               false = hanya cek (dipakai di rawFile)
-     * @return array{
-     *   allowed: bool,
-     *   pending: bool,
-     *   remainingSeconds: int|null,
-     *   pendingRequest: \App\Models\DocumentAccessRequest|null
-     * }
-     */
     protected function checkDocumentAccess(Document $document, bool $createPending = true): array
     {
         $user = Auth::user();
@@ -634,13 +637,11 @@ class DocumentUploadController extends Controller
 
         if ($approvedRequest) {
             if ($useTimedAccess) {
-                // Hitung batas waktu dari decided_at + default_duration_minutes
                 $startTime  = $approvedRequest->decided_at ?? $approvedRequest->created_at;
                 $validUntil = $startTime
                     ? (clone $startTime)->addMinutes($accessSetting->default_duration_minutes)
                     : now()->addMinutes($accessSetting->default_duration_minutes);
 
-                // Simpan ke expires_at supaya kelihatan di log
                 if (!$approvedRequest->expires_at || !$approvedRequest->expires_at->eq($validUntil)) {
                     $approvedRequest->expires_at = $validUntil;
                     $approvedRequest->save();
@@ -654,17 +655,14 @@ class DocumentUploadController extends Controller
                     }
                 }
             } else {
-                // Tanpa pembatasan waktu
                 $hasApprovedAccess = true;
             }
         }
 
-        // Kalau tidak ada akses approved yang masih berlaku
         if (!$hasApprovedAccess) {
             $pendingRequest = null;
 
             if ($createPending) {
-                // Dipanggil dari gate (stream) → boleh buat / ambil pending
                 $pendingRequest = DocumentAccessRequest::firstOrCreate(
                     [
                         'user_id'     => $user->id,
@@ -677,7 +675,6 @@ class DocumentUploadController extends Controller
                     ]
                 );
             } else {
-                // Dipanggil dari rawFile → JANGAN buat baru, cukup cek kalau ada pending lama
                 $pendingRequest = DocumentAccessRequest::where('user_id', $user->id)
                     ->where('document_id', $document->id)
                     ->where('status', 'pending')
