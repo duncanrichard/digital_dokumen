@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\JenisDokumen;
 use App\Models\Department;
 use App\Models\Document;
+use App\Models\Clinic; // ✅ tambah
 use App\Models\WatermarkSetting;
 use App\Models\DocumentAccessRequest;
 use App\Models\DocumentAccessSetting;
@@ -22,36 +23,22 @@ class DocumentUploadController extends Controller
 {
     public function __construct()
     {
-        // Semua action butuh user login
         $this->middleware(function ($request, $next) {
             $user = auth()->user();
+            if (!$user) abort(401);
 
-            if (!$user) {
-                abort(401);
-            }
-
-            // ==============================
-            // 1. CEK SUPERADMIN DARI role_id
-            // ==============================
-            $roleName     = optional($user->role)->name; // relasi role() di model User
+            // 1) Superadmin bypass
+            $roleName     = optional($user->role)->name;
             $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
+            if ($isSuperadmin) return $next($request);
 
-            if ($isSuperadmin) {
-                // Superadmin bebas akses semua method
-                return $next($request);
-            }
+            // 2) Role-based permission check
+            $role   = $user->role;
+            $method = $request->route()->getActionMethod();
 
-            // ========================================
-            // 2. USER BIASA → CEK PERMISSION DARI ROLE
-            // ========================================
-            $role   = $user->role; // App\Models\Role (extends Spatie Role)
-            $method = $request->route()->getActionMethod(); // nama method controller
-
-            // Mapping method -> permission yang dibutuhkan
             $requiredPermission = null;
 
             switch ($method) {
-                // Aksi-aksi yang hanya "view / akses" dokumen
                 case 'index':
                 case 'open':
                 case 'stream':
@@ -60,34 +47,37 @@ class DocumentUploadController extends Controller
                     $requiredPermission = 'documents.upload.view';
                     break;
 
-                // Simpan dokumen baru / revisi
                 case 'store':
-                    $requiredPermission = 'documents.upload.create';
+                    // ✅ store dipakai banyak mode → cek dari _from
+                    $from = (string) $request->input('_from', '');
+
+                    if ($from === 'change') {
+                        $requiredPermission = 'documents.upload.change';
+                    } elseif ($from === 'derive_clinic') {
+                        $requiredPermission = 'documents.upload.derive_clinic';
+                    } else {
+                        // create / revise / default
+                        $requiredPermission = 'documents.upload.create';
+                    }
                     break;
 
-                // Edit / update dokumen
                 case 'edit':
                 case 'update':
                     $requiredPermission = 'documents.upload.update';
                     break;
 
-                // Hapus dokumen
                 case 'destroy':
                     $requiredPermission = 'documents.upload.delete';
                     break;
 
                 default:
-                    // Default bisa kamu set ke view, atau dibiarkan null
                     $requiredPermission = 'documents.upload.view';
                     break;
             }
 
             if ($requiredPermission) {
                 $hasPermission = $role && $role->hasPermissionTo($requiredPermission);
-
-                if (!$hasPermission) {
-                    abort(403, 'Anda tidak memiliki izin untuk mengakses fitur ini.');
-                }
+                if (!$hasPermission) abort(403, 'Anda tidak memiliki izin untuk mengakses fitur ini.');
             }
 
             return $next($request);
@@ -95,8 +85,7 @@ class DocumentUploadController extends Controller
     }
 
     /**
-     * ✅ Tambahan: Helper untuk bikin sequence tampil 01, 02, 03, ...
-     * (sequence di database tetap angka 1,2,3 agar max('sequence') aman)
+     * Helper format sequence 01,02,...
      */
     protected function formatSequence(int $seq, int $pad = 2): string
     {
@@ -107,36 +96,34 @@ class DocumentUploadController extends Controller
     public function index(Request $request)
     {
         $q             = trim((string) $request->get('q'));
-        $filterJenisId = $request->get('document_type_id'); // uuid
-        $filterDeptId  = $request->get('department_id');    // uuid
+        $filterJenisId = $request->get('document_type_id');
+        $filterDeptId  = $request->get('department_id');
 
-        // Ambil dept user login (boleh null untuk admin)
         $me         = $request->user();
-        $myDeptId   = $me?->department_id;      // uuid | null
-        $lockDeptId = $myDeptId;                // jika ada, kita kunci akses dokumen hanya utk divisi ini
+        $myDeptId   = $me?->department_id;
+        $lockDeptId = $myDeptId;
 
-        // Dropdown Document Types (selalu tersedia)
         $documentTypes = JenisDokumen::where('is_active', true)
             ->orderBy('nama')
-            ->get(['id','kode','nama']);
+            ->get(['id', 'kode', 'nama']);
 
-        // Dropdown Departments:
-        // - Jika user punya dept → hanya dept itu yang tampil
-        // - Jika tidak punya dept → tampil semua dept aktif
         $departments = Department::when($lockDeptId, fn($q2) => $q2->where('id', $lockDeptId))
             ->when(!$lockDeptId, fn($q3) => $q3->where('is_active', true))
             ->orderBy('name')
-            ->get(['id','code','name']);
+            ->get(['id', 'code', 'name']);
+
+        // ✅ untuk modal Turunan Klinik
+        $clinics = Clinic::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'code', 'name']);
 
         $items = Document::with([
                 'jenisDokumen:id,kode,nama',
                 'department:id,code,name',
                 'distributedDepartments:id',
-                // relasi dokumen diubah ke / dari dokumen lain
                 'changedToDocuments:id,document_number,revision',
                 'changedFromDocuments:id,document_number,revision',
             ])
-            // Pencarian teks
             ->when($q !== '', function ($query) use ($q) {
                 $needle = mb_strtolower($q);
                 $query->where(function ($sub) use ($needle) {
@@ -152,11 +139,7 @@ class DocumentUploadController extends Controller
                         });
                 });
             })
-            // Filter jenis dokumen dari form
             ->when($filterJenisId, fn($q2) => $q2->where('jenis_dokumen_id', $filterJenisId))
-
-            // Filter DIVISI dari form:
-            // artinya: dokumen milik divisi tsb ATAU didistribusikan ke divisi tsb.
             ->when($filterDeptId, function ($q3) use ($filterDeptId) {
                 $q3->where(function ($sub) use ($filterDeptId) {
                     $sub->where('department_id', $filterDeptId)
@@ -165,8 +148,6 @@ class DocumentUploadController extends Controller
                         });
                 });
             })
-
-            // PEMBATASAN BERDASARKAN DIVISI USER YANG LOGIN (security gate)
             ->when($lockDeptId, function ($q4) use ($lockDeptId) {
                 $q4->where(function ($sub) use ($lockDeptId) {
                     $sub->where('department_id', $lockDeptId)
@@ -175,7 +156,6 @@ class DocumentUploadController extends Controller
                         });
                 });
             })
-
             ->orderByDesc('publish_date')
             ->paginate(10)
             ->withQueryString();
@@ -185,54 +165,82 @@ class DocumentUploadController extends Controller
             'q',
             'documentTypes',
             'departments',
+            'clinics', // ✅ ditambahkan
             'filterJenisId',
             'filterDeptId',
             'lockDeptId'
         ));
     }
 
-    // ================== STORE (BARU / REVISI / UBAH JADI DOK BARU) ==================
+    // ================== STORE (BARU / REVISI / CHANGE / DERIVE CLINIC) ==================
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'document_type_id'           => ['nullable','uuid','exists:jenis_dokumen,id'],
-            'department_id'              => ['nullable','uuid','exists:departments,id'],
-            'document_name'              => ['required','string','max:255'],
-            'publish_date'               => ['required','date'],
-            'file'                       => ['required','file','mimes:pdf','max:10240'],
-            'is_active'                  => ['nullable','in:1'],
-            // field distribusi (opsional)
-            'distribute_mode'            => ['nullable','in:all,selected'],
+        /**
+         * Mode berasal dari hidden input _from:
+         * - create (default)
+         * - change
+         * - derive_clinic
+         * - revise (biasanya pakai revise_of)
+         */
+        $from = (string) $request->input('_from', 'create');
+
+        // Rules dasar yang selalu ada
+        $rules = [
+            'document_name' => ['required', 'string', 'max:255'],
+            'publish_date'  => ['required', 'date'],
+            'file'          => ['required', 'file', 'mimes:pdf', 'max:10240'],
+            'is_active'     => ['nullable', 'in:1'],
+            'notes'         => ['nullable', 'string'],
+
+            // distribusi (opsional)
+            'distribute_mode'            => ['nullable', 'in:all,selected'],
             'distribution_departments'   => ['array'],
-            'distribution_departments.*' => ['uuid','exists:departments,id'],
-            'revise_of'                  => ['nullable','uuid','exists:documents,id'],
-            // dokumen asal yang DIUBAH menjadi dokumen baru (nomor baru)
-            'change_of'                  => ['nullable','uuid','exists:documents,id'],
-            // catatan dokumen (opsional)
-            'notes'                      => ['nullable','string'],
-        ]);
+            'distribution_departments.*' => ['uuid', 'exists:departments,id'],
+
+            // mode link
+            'revise_of' => ['nullable', 'uuid', 'exists:documents,id'],
+            'change_of' => ['nullable', 'uuid', 'exists:documents,id'],
+            'derive_of' => ['nullable', 'uuid', 'exists:documents,id'], // ✅ turunan klinik
+            'clinic_id' => ['nullable', 'uuid', 'exists:clinics,id'],   // ✅ turunan klinik
+        ];
+
+        // Kebutuhan tambahan per mode:
+        if ($from === 'derive_clinic') {
+            // derive tidak butuh document_type_id & department_id, karena mengikuti base doc
+            $rules['derive_of'] = ['required', 'uuid', 'exists:documents,id'];
+            $rules['clinic_id'] = ['required', 'uuid', 'exists:clinics,id'];
+            $rules['document_type_id'] = ['nullable'];
+            $rules['department_id']    = ['nullable'];
+        } elseif ($request->filled('revise_of')) {
+            // revise mengikuti base doc
+            $rules['revise_of'] = ['required', 'uuid', 'exists:documents,id'];
+            $rules['document_type_id'] = ['nullable'];
+            $rules['department_id']    = ['nullable'];
+        } else {
+            // create / change → butuh jenis & dept
+            $rules['document_type_id'] = ['required', 'uuid', 'exists:jenis_dokumen,id'];
+            $rules['department_id']    = ['required', 'uuid', 'exists:departments,id'];
+        }
+
+        $validated = $request->validate($rules);
 
         $storedPath = $request->file('file')->store('documents', 'public');
-
-        // Nilai boolean is_active: true kalau checkbox dicentang, false kalau tidak
         $isActive   = $request->has('is_active');
-        $changeOfId = $validated['change_of'] ?? null;
 
-        // === MODE REVISI (nomor sama, revision naik) ===
+        // =========================================================
+        // MODE: REVISE (nomor sama, revision naik) → versi lama INACTIVE
+        // =========================================================
         if (!empty($validated['revise_of'])) {
-            $base = Document::with(['jenisDokumen:id,kode', 'department:id,code', 'distributedDepartments:id'])
+            $base = Document::with(['distributedDepartments:id'])
                 ->findOrFail($validated['revise_of']);
 
             $maxRevision  = (int) Document::where('document_number', $base->document_number)->max('revision');
             $nextRevision = $maxRevision + 1;
 
             DB::transaction(function () use ($validated, $base, $storedPath, $nextRevision, $isActive) {
-                // Nonaktifkan semua versi lama
                 Document::where('document_number', $base->document_number)
                     ->update(['is_active' => false]);
 
-                // Buat versi baru
-                /** @var \App\Models\Document $doc */
                 $doc = Document::create([
                     'jenis_dokumen_id' => $base->jenis_dokumen_id,
                     'department_id'    => $base->department_id,
@@ -244,37 +252,82 @@ class DocumentUploadController extends Controller
                     'file_path'        => $storedPath,
                     'is_active'        => $isActive,
                     'read_notifikasi'  => 0,
-                    'notes'            => $validated['notes'] ?? null, // SIMPAN CATATAN
+                    'notes'            => $validated['notes'] ?? null,
                 ]);
 
-                // Distribusi versi baru: salin dari base (TIDAK mengutak-atik dokumen lain)
-                $baseDeptIds = $base->distributedDepartments()->pluck('departments.id')->all();
-                if (!empty($baseDeptIds)) {
-                    $doc->distributedDepartments()->sync($baseDeptIds);
-                } else {
-                    // fallback: minimal departemen pemilik
-                    $doc->distributedDepartments()->sync([$base->department_id]);
-                }
+                $baseDistIds = $base->distributedDepartments()->pluck('departments.id')->all();
+                $doc->distributedDepartments()->sync(!empty($baseDistIds) ? $baseDistIds : [$base->department_id]);
             });
 
-            $displayNumber = "{$base->document_number} R{$nextRevision}";
             return redirect()->route('documents.index')
-                ->with('success', "Document revised. New number: {$displayNumber}");
+                ->with('success', "Document revised. New number: {$base->document_number} R{$nextRevision}");
         }
 
-        // === MODE BARU (R0) / UBAH JADI DOKUMEN BARU (NOMOR BARU) ===
-        $jenis = JenisDokumen::select('id','kode')->findOrFail($validated['document_type_id']);
-        $dept  = Department::select('id','code')->findOrFail($validated['department_id']);
+        // =========================================================
+        // MODE: DERIVE CLINIC (Turunan Klinik) → nomor BASE-CLINICCODE
+        // =========================================================
+        if ($from === 'derive_clinic') {
+            $base = Document::with(['distributedDepartments:id'])
+                ->findOrFail($validated['derive_of']);
+
+            $clinic = Clinic::select('id', 'code', 'name')->findOrFail($validated['clinic_id']);
+
+            // contoh: IM-LGL/02/2025-IMMO.1
+            $derivedNumber = "{$base->document_number}-{$clinic->code}";
+
+            DB::transaction(function () use ($validated, $base, $clinic, $storedPath, $isActive, $derivedNumber) {
+                // OPTIONAL: kalau mau block duplikat nomor
+                $exists = Document::where('document_number', $derivedNumber)->where('revision', 0)->exists();
+                if ($exists) {
+                    // lempar exception agar rollback
+                    throw new \RuntimeException("Nomor turunan sudah ada: {$derivedNumber}");
+                }
+
+                $doc = Document::create([
+                    'jenis_dokumen_id' => $base->jenis_dokumen_id,
+                    'department_id'    => $base->department_id,
+                    'sequence'         => $base->sequence,      // ikut base (tidak mengganggu max sequence create)
+                    'document_number'  => $derivedNumber,
+                    'revision'         => 0,
+                    'name'             => $validated['document_name'],
+                    'publish_date'     => $validated['publish_date'],
+                    'file_path'        => $storedPath,
+                    'is_active'        => $isActive,
+                    'read_notifikasi'  => 0,
+                    'notes'            => $validated['notes'] ?? null,
+                ]);
+
+                // distribusi ikut base (agar akses sama)
+                $baseDistIds = $base->distributedDepartments()->pluck('departments.id')->all();
+                $doc->distributedDepartments()->sync(!empty($baseDistIds) ? $baseDistIds : [$base->department_id]);
+
+                // relasi base -> turunan (pakai pivot yang sama dengan change, beda relation_type)
+                // pastikan relasi changedToDocuments() ada dan pivot kolom relation_type ada.
+                $base->changedToDocuments()->syncWithoutDetaching([
+                    $doc->id => ['relation_type' => 'derived_clinic'],
+                ]);
+            });
+
+            return redirect()->route('documents.index')
+                ->with('success', "Turunan klinik berhasil dibuat. Number: {$derivedNumber} R0");
+        }
+
+        // =========================================================
+        // MODE: CREATE / CHANGE → nomor baru (R0)
+        // =========================================================
+        $jenis = JenisDokumen::select('id', 'kode')->findOrFail($validated['document_type_id']);
+        $dept  = Department::select('id', 'code')->findOrFail($validated['department_id']);
         $year  = Carbon::parse($validated['publish_date'])->format('Y');
 
         $nextSequence = (int) Document::where('jenis_dokumen_id', $jenis->id)
             ->where('department_id', $dept->id)
             ->max('sequence');
-        $nextSequence = $nextSequence ? $nextSequence + 1 : 1;
 
-        // ✅ Perubahan: sequence di nomor dokumen jadi 2 digit
-        $seqFormatted  = $this->formatSequence($nextSequence, 2);
+        $nextSequence = $nextSequence ? $nextSequence + 1 : 1;
+        $seqFormatted = $this->formatSequence($nextSequence, 2);
+
         $documentNumber = "{$jenis->kode}-{$dept->code}/{$seqFormatted}/{$year}";
+        $changeOfId     = $validated['change_of'] ?? null;
 
         DB::transaction(function () use (
             $validated,
@@ -286,22 +339,21 @@ class DocumentUploadController extends Controller
             $isActive,
             $changeOfId
         ) {
-            /** @var \App\Models\Document $doc */
             $doc = Document::create([
                 'jenis_dokumen_id' => $jenis->id,
                 'department_id'    => $dept->id,
-                'sequence'         => $nextSequence,     // tetap angka
-                'document_number'  => $documentNumber,   // tampil 01,02,...
+                'sequence'         => $nextSequence,
+                'document_number'  => $documentNumber,
                 'revision'         => 0,
                 'name'             => $validated['document_name'],
                 'publish_date'     => $validated['publish_date'],
                 'file_path'        => $storedPath,
                 'is_active'        => $isActive,
                 'read_notifikasi'  => 0,
-                'notes'            => $validated['notes'] ?? null, // SIMPAN CATATAN
+                'notes'            => $validated['notes'] ?? null,
             ]);
 
-            // === DISTRIBUSI UNTUK DOKUMEN BARU ===
+            // DISTRIBUSI
             if (!empty($validated['distribute_mode'])) {
                 $mode = $validated['distribute_mode'];
 
@@ -310,37 +362,31 @@ class DocumentUploadController extends Controller
                     $doc->distributedDepartments()->sync($allDeptIds);
                 } else {
                     $selected = collect($validated['distribution_departments'] ?? [])
-                        ->unique()->values()->all();
+                        ->unique()
+                        ->values()
+                        ->all();
 
-                    if (!empty($selected)) {
-                        $doc->distributedDepartments()->sync($selected);
-                    } else {
-                        $doc->distributedDepartments()->sync([$dept->id]);
-                    }
+                    $doc->distributedDepartments()->sync(!empty($selected) ? $selected : [$dept->id]);
                 }
             } else {
-                // default: hanya departemen pemilik
                 $doc->distributedDepartments()->sync([$dept->id]);
             }
 
-            // Jika ini mode "ubah dokumen lama menjadi dokumen baru"
+            // MODE CHANGE: dokumen lama tetap aktif, buat relasi + copy distribusi lama
             if ($changeOfId) {
                 $old = Document::with('distributedDepartments:id')->find($changeOfId);
-                if ($old) {
-                    // optional: nonaktifkan dokumen lama
-                    $old->update(['is_active' => false]);
 
-                    // relasi parent -> child di pivot document_relations
-                    $old->changedToDocuments()->attach($doc->id, [
-                        'relation_type' => 'changed_to',
+                if ($old) {
+                    // relasi old -> new
+                    $old->changedToDocuments()->syncWithoutDetaching([
+                        $doc->id => ['relation_type' => 'changed_to'],
                     ]);
 
-                    // SALIN distribusi dokumen lama ke dokumen baru
+                    // copy distribusi old → override distribusi doc baru
                     $oldDistIds = $old->distributedDepartments->pluck('id')->all();
                     if (!empty($oldDistIds)) {
                         $doc->distributedDepartments()->sync($oldDistIds);
                     }
-                    // tidak menyentuh distribusi dokumen lama
                 }
             }
         });
@@ -380,11 +426,12 @@ class DocumentUploadController extends Controller
             'publish_date'               => ['required','date'],
             'file'                       => ['nullable','file','mimes:pdf','max:10240'],
             'is_active'                  => ['nullable','in:1'],
-            // distribusi (OPSI) → HANYA dipakai kalau dikirim dari form
+
             'distribute_mode'            => ['nullable','in:all,selected'],
             'distribution_departments'   => ['array'],
             'distribution_departments.*' => ['uuid','exists:departments,id'],
-            'notes'                      => ['nullable','string'],   // VALIDASI CATATAN
+
+            'notes'                      => ['nullable','string'],
         ]);
 
         $jenis = JenisDokumen::select('id','kode')->findOrFail($validated['document_type_id']);
@@ -396,8 +443,6 @@ class DocumentUploadController extends Controller
             : null;
 
         $renumber = ($document->jenis_dokumen_id !== $jenis->id) || ($document->department_id !== $dept->id);
-
-        // Nilai boolean is_active dari form edit
         $isActive = $request->has('is_active');
 
         DB::transaction(function () use ($validated, $document, $jenis, $dept, $newPath, $oldPath, $renumber, $isActive) {
@@ -407,25 +452,26 @@ class DocumentUploadController extends Controller
                 'name'             => $validated['document_name'],
                 'publish_date'     => $validated['publish_date'],
                 'is_active'        => $isActive,
-                'notes'            => $validated['notes'] ?? null, // SIMPAN CATATAN
+                'notes'            => $validated['notes'] ?? null,
             ];
 
             if ($newPath) {
                 $payload['file_path']       = $newPath;
-                $payload['read_notifikasi'] = 0; // file baru: tampilkan notif
+                $payload['read_notifikasi'] = 0;
             }
 
             if ($renumber) {
                 $year = Carbon::parse($validated['publish_date'])->format('Y');
+
                 $nextSequence = (int) Document::where('jenis_dokumen_id', $jenis->id)
                     ->where('department_id', $dept->id)
                     ->max('sequence');
+
                 $nextSequence = $nextSequence ? $nextSequence + 1 : 1;
 
-                // ✅ Perubahan: sequence di nomor dokumen jadi 2 digit
                 $seqFormatted = $this->formatSequence($nextSequence, 2);
 
-                $payload['sequence']        = $nextSequence; // tetap angka
+                $payload['sequence']        = $nextSequence;
                 $payload['document_number'] = "{$jenis->kode}-{$dept->code}/{$seqFormatted}/{$year}";
                 $payload['revision']        = 0;
             }
@@ -436,9 +482,6 @@ class DocumentUploadController extends Controller
                 Storage::disk('public')->delete($oldPath);
             }
 
-            // ============================
-            // DISTRIBUSI DI UPDATE:
-            // ============================
             if (!empty($validated['distribute_mode'])) {
                 $mode = $validated['distribute_mode'];
 
@@ -449,18 +492,12 @@ class DocumentUploadController extends Controller
                     $selected = collect($validated['distribution_departments'] ?? [])
                         ->unique()->values()->all();
 
-                    if (!empty($selected)) {
-                        $document->distributedDepartments()->sync($selected);
-                    } else {
-                        // fallback: minimal departemen pemilik
-                        $document->distributedDepartments()->sync([$dept->id]);
-                    }
+                    $document->distributedDepartments()->sync(!empty($selected) ? $selected : [$dept->id]);
                 }
             }
         });
 
-        return redirect()
-            ->route('documents.index')
+        return redirect()->route('documents.index')
             ->with('success', 'Document updated successfully.');
     }
 
@@ -471,14 +508,15 @@ class DocumentUploadController extends Controller
             if ($document->file_path && Storage::disk('public')->exists($document->file_path)) {
                 Storage::disk('public')->delete($document->file_path);
             }
+
             if (method_exists($document, 'distributedDepartments')) {
                 $document->distributedDepartments()->detach();
             }
+
             $document->delete();
         });
 
-        return redirect()
-            ->route('documents.index')
+        return redirect()->route('documents.index')
             ->with('success', 'Document deleted.');
     }
 
@@ -504,17 +542,15 @@ class DocumentUploadController extends Controller
         return back()->with('success', 'All notifications marked as read.');
     }
 
-    // ================== GATE: CEK AKSES, TENTUKAN BUKA TAB BARU / PENDING ==================
+    // ================== GATE: CEK AKSES ==================
     public function stream(Document $document)
     {
         if (!$document->file_path || !Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'File not found.');
         }
 
-        // Di gate: kalau tidak punya akses → SEKALIGUS buat request pending
         $check = $this->checkDocumentAccess($document, true);
 
-        // Jika belum di-approve → tampil halaman pending (tidak buka tab baru)
         if (!$check['allowed'] && $check['pending'] && $check['pendingRequest']) {
             return view('documents.access-requests.pending', [
                 'document'      => $document,
@@ -522,25 +558,22 @@ class DocumentUploadController extends Controller
             ]);
         }
 
-        // Sudah approved → tampil halaman kecil yang akan buka tab baru ke rawFile + tampil timer
         return view('documents.access-requests.open', [
             'document'         => $document,
-            'remainingSeconds' => $check['remainingSeconds'], // bisa null kalau setting tidak pakai timer
+            'remainingSeconds' => $check['remainingSeconds'],
         ]);
     }
 
-    // ================== RAW FILE: DIPANGGIL DARI TAB BARU ==================
+    // ================== RAW FILE ==================
     public function rawFile(Document $document)
     {
         if (!$document->file_path || !Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'File not found.');
         }
 
-        // Di tab PDF: HANYA cek akses, JANGAN buat request pending baru
         $check = $this->checkDocumentAccess($document, false);
 
         if (!$check['allowed']) {
-            // Kalau waktu habis / akses sudah tidak berlaku → balik ke library dengan pesan
             return redirect()
                 ->route('documents.index')
                 ->with('error', 'Waktu akses dokumen sudah habis. Silakan ajukan permintaan akses lagi jika diperlukan.');
@@ -551,7 +584,6 @@ class DocumentUploadController extends Controller
         $setting      = WatermarkSetting::first();
         $useWatermark = $setting && $setting->enabled;
 
-        // Helper kecil untuk kirim file tanpa watermark
         $sendOriginal = function () use ($absolutePath, $asDownload) {
             $filename    = basename($absolutePath);
             $disposition = $asDownload ? 'attachment' : 'inline';
@@ -563,12 +595,10 @@ class DocumentUploadController extends Controller
             ]);
         };
 
-        // Jika tidak ada watermark, langsung kirim file asli
         if (!$useWatermark) {
             return $sendOriginal();
         }
 
-        // ==== MODE WATERMARK: coba pakai FPDI, kalau gagal → fallback ke file asli ====
         try {
             $pdf       = new Fpdi();
             $pageCount = $pdf->setSourceFile($absolutePath);
@@ -588,7 +618,7 @@ class DocumentUploadController extends Controller
             }
 
             $downloadName = basename($absolutePath);
-            $dest         = $asDownload ? 'D' : 'I'; // D = attachment, I = inline
+            $dest         = $asDownload ? 'D' : 'I';
 
             return new StreamedResponse(function () use ($pdf, $downloadName, $dest) {
                 $pdf->Output($dest, $downloadName);
@@ -596,7 +626,6 @@ class DocumentUploadController extends Controller
                 'Content-Type' => 'application/pdf',
             ]);
         } catch (\Throwable $e) {
-            // Jika FPDI gagal (mis. compression tidak didukung), log dan fallback ke file asli
             Log::warning('FPDI gagal memproses PDF, fallback ke file asli tanpa watermark.', [
                 'document_id' => $document->id,
                 'message'     => $e->getMessage(),
@@ -611,7 +640,6 @@ class DocumentUploadController extends Controller
     {
         $user = Auth::user();
 
-        // Admin / user tanpa department → bebas akses
         if (!$user || !$user->department_id) {
             return [
                 'allowed'          => true,
@@ -621,11 +649,9 @@ class DocumentUploadController extends Controller
             ];
         }
 
-        // Setting durasi akses
         $accessSetting  = DocumentAccessSetting::first();
         $useTimedAccess = $accessSetting && $accessSetting->enabled && $accessSetting->default_duration_minutes;
 
-        // Ambil approval terakhir
         $approvedRequest = DocumentAccessRequest::where('user_id', $user->id)
             ->where('document_id', $document->id)
             ->where('status', 'approved')
@@ -650,9 +676,7 @@ class DocumentUploadController extends Controller
                 if ($validUntil->isFuture()) {
                     $hasApprovedAccess = true;
                     $remainingSeconds  = now()->diffInSeconds($validUntil, false);
-                    if ($remainingSeconds < 0) {
-                        $remainingSeconds = 0;
-                    }
+                    if ($remainingSeconds < 0) $remainingSeconds = 0;
                 }
             } else {
                 $hasApprovedAccess = true;
@@ -752,9 +776,7 @@ class DocumentUploadController extends Controller
     protected function applyImageWatermark(Fpdi $pdf, WatermarkSetting $s, $w, $h)
     {
         $path = public_path($s->image_path);
-        if (!file_exists($path)) {
-            return;
-        }
+        if (!file_exists($path)) return;
 
         $imgW = $w * 0.5;
         $imgH = 0;
@@ -777,12 +799,9 @@ class DocumentUploadController extends Controller
     protected function hexToRgb($hex): array
     {
         $hex = str_replace('#', '', $hex);
-        if (strlen($hex) === 8) {
-            $hex = substr($hex, 0, 6); // abaikan alpha
-        }
-        if (strlen($hex) !== 6) {
-            return [160,160,160];
-        }
+        if (strlen($hex) === 8) $hex = substr($hex, 0, 6);
+        if (strlen($hex) !== 6) return [160,160,160];
+
         return [
             hexdec(substr($hex, 0, 2)),
             hexdec(substr($hex, 2, 2)),
@@ -811,26 +830,16 @@ class DocumentUploadController extends Controller
 
         switch ($pos) {
             case 'top-left':
-                $x = $margin;
-                $y = $margin;
-                break;
+                $x = $margin; $y = $margin; break;
             case 'top-right':
-                $x = $w - $imgW - $margin;
-                $y = $margin;
-                break;
+                $x = $w - $imgW - $margin; $y = $margin; break;
             case 'bottom-left':
-                $x = $margin;
-                $y = $h - $imgH - $margin;
-                break;
+                $x = $margin; $y = $h - $imgH - $margin; break;
             case 'bottom-right':
-                $x = $w - $imgW - $margin;
-                $y = $h - $imgH - $margin;
-                break;
+                $x = $w - $imgW - $margin; $y = $h - $imgH - $margin; break;
             case 'center':
             default:
-                $x = ($w - $imgW) / 2;
-                $y = ($h - $imgH) / 2;
-                break;
+                $x = ($w - $imgW) / 2; $y = ($h - $imgH) / 2; break;
         }
 
         return [$x, $y];

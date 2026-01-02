@@ -13,53 +13,101 @@
         }
       ]
     },
-
     {
       "url": "javascript:void(0);",
       "name": "Document Control",
       "icon": "menu-icon tf-icons mdi mdi-file-document-outline",
       "slug": "document-control",
       "submenu": [
-        { "url": "/documents/upload",       "name": "Document Library", "slug": "document-control-upload" },
-        { "url": "/documents/distribution", "name": "Distribution",     "slug": "document-control-distribution" },
-        { "url": "/documents/revisions",    "name": "Revisions",        "slug": "document-control-revisions" },
-        { "url": "/documents/access-approvals","name": "Access Approvals", "slug": "document-control-approvals" }
+        {
+          "url": "/documents/upload",
+          "name": "Document Library",
+          "slug": "document-control-upload"
+        },
+        {
+          "url": "/documents/distribution",
+          "name": "Distribution",
+          "slug": "document-control-distribution"
+        },
+        {
+          "url": "/documents/revisions",
+          "name": "Revisions",
+          "slug": "document-control-revisions"
+        },
+        {
+          "url": "/documents/access-approvals",
+          "name": "Access Approvals",
+          "slug": "document-control-approvals"
+        }
       ]
     },
-
     {
       "url": "javascript:void(0);",
       "name": "Master Data",
       "icon": "menu-icon tf-icons mdi mdi-database-outline",
       "slug": "master-data",
       "submenu": [
-        { "url": "/master/jenis-dokumen", "name": "Document Types",      "slug": "master-jenis-dokumen" },
-        { "url": "/master/departments",   "name": "Divisi",              "slug": "master-departments" }
+        {
+          "url": "/master/jenis-dokumen",
+          "name": "Document Types",
+          "slug": "master-jenis-dokumen"
+        },
+        {
+          "url": "/master/departments",
+          "name": "Divisi",
+          "slug": "master-departments"
+        },
+        {
+          "url": "/master/clinics",
+          "name": "Klinik",
+          "slug": "master-clinics"
+        }
       ]
     },
-
     {
       "url": "javascript:void(0);",
       "name": "User Access",
       "icon": "menu-icon tf-icons mdi mdi-account-lock-outline",
       "slug": "user-access",
       "submenu": [
-        { "url": "/access/users",       "name": "Users",               "slug": "access-users" },
-        { "url": "/access/roles",       "name": "Roles",               "slug": "access-roles" },
-
-        { "url": "/access/permissions", "name": "Permission Settings", "slug": "access-permissions" }
+        {
+          "url": "/access/users",
+          "name": "Users",
+          "slug": "access-users"
+        },
+        {
+          "url": "/access/roles",
+          "name": "Roles",
+          "slug": "access-roles"
+        },
+        {
+          "url": "/access/permissions",
+          "name": "Permission Settings",
+          "slug": "access-permissions"
+        }
       ]
     },
-
     {
       "url": "javascript:void(0);",
       "name": "Settings",
       "icon": "menu-icon tf-icons mdi mdi-cog-outline",
       "slug": "settings",
       "submenu": [
-        { "url": "/settings/watermark",      "name": "Watermark/DRM",    "slug": "settings-watermark" },
-        { "url": "/system/framework",        "name": "Framework System", "slug": "system-framework" },
-        { "url": "/settings/document-access","name": "Document Access",  "slug": "settings-document-access" }
+        {
+          "url": "/settings/watermark",
+          "name": "Watermark/DRM",
+          "slug": "settings-watermark"
+        },
+        {
+          "url": "/system/framework",
+          "name": "Framework System",
+          "slug": "system-framework"
+        },
+        {
+          "url": "/settings/document-access",
+          "name": "Document Access",
+          "slug": "settings-document-access"
+        }
       ]
     }
   ]

@@ -29,19 +29,21 @@ class Document extends Model
         'is_active',
         'revision',
         'read_notifikasi',
-        'notes',          // <-- TAMBAH INI
+        'notes',
     ];
 
     protected $casts = [
-        'publish_date'     => 'date',
-        'is_active'        => 'boolean',
-        'read_notifikasi'  => 'boolean',
-        'revision'         => 'integer',
-        'sequence'         => 'integer',
-        'notes'            => 'string', // opsional, biar konsisten
+        'publish_date'    => 'date',
+        'is_active'       => 'boolean',
+        'read_notifikasi' => 'boolean',
+        'revision'        => 'integer',
+        'sequence'        => 'integer',
+        'notes'           => 'string',
     ];
 
-    // ... sisanya tetap seperti semula ...
+    /* =======================
+     |  RELATIONS (MASTER)
+     ======================= */
 
     public function jenisDokumen()
     {
@@ -68,15 +70,23 @@ class Document extends Model
         return $this->hasMany(DocumentDistribution::class, 'document_id', 'id');
     }
 
+    /* =======================
+     |  SCOPES
+     ======================= */
+
     public function scopeSearch(Builder $q, ?string $term): Builder
     {
-        if (!$term) return $q;
-        $driver = $q->getModel()->getConnection()->getDriverName();
-        $like   = $driver === 'pgsql' ? 'ILIKE' : 'LIKE';
+        $term = trim((string) $term);
+        if ($term === '') return $q;
 
-        return $q->where(function ($w) use ($term, $like) {
-            $w->where('name', $like, "%{$term}%")
-              ->orWhere('document_number', $like, "%{$term}%");
+        // escape LIKE wildcard agar aman
+        $escaped = addcslashes($term, "\\%_");
+        $driver  = $q->getModel()->getConnection()->getDriverName();
+        $like    = $driver === 'pgsql' ? 'ILIKE' : 'LIKE';
+
+        return $q->where(function ($w) use ($escaped, $like) {
+            $w->where('name', $like, "%{$escaped}%")
+              ->orWhere('document_number', $like, "%{$escaped}%");
         });
     }
 
@@ -96,6 +106,10 @@ class Document extends Model
                  ->orderByDesc('created_at');
     }
 
+    /* =======================
+     |  ACCESSORS
+     ======================= */
+
     public function getFileUrlAttribute(): ?string
     {
         if (!$this->file_path) return null;
@@ -107,13 +121,28 @@ class Document extends Model
         return Storage::url($this->file_path);
     }
 
-    public function getDisplayNumberAttribute(): string
+    public function getFileNameAttribute(): ?string
     {
-        return "{$this->document_number} R{$this->revision}";
+        if (!$this->file_path) return null;
+        return basename($this->file_path);
     }
 
-    // Dokumen ini DIUBAH MENJADI dokumen lain (dokumen baru)
-    public function changedToDocuments()
+    public function getDisplayNumberAttribute(): string
+    {
+        $rev = (int) ($this->revision ?? 0);
+        return "{$this->document_number} R{$rev}";
+    }
+
+    /* =======================
+     |  DOCUMENT RELATIONS
+     |  Pivot: document_relations
+     |  parent_document_id, child_document_id, relation_type
+     ======================= */
+
+    /**
+     * Dokumen ini -> punya CHILD (dokumen hasil perubahan / turunan)
+     */
+    public function relationsToChildren()
     {
         return $this->belongsToMany(
             self::class,
@@ -123,8 +152,10 @@ class Document extends Model
         )->withPivot('relation_type')->withTimestamps();
     }
 
-    // Dokumen ini HASIL PERUBAHAN dari dokumen lain
-    public function changedFromDocuments()
+    /**
+     * Dokumen ini -> punya PARENT (dokumen asal)
+     */
+    public function relationsToParents()
     {
         return $this->belongsToMany(
             self::class,
@@ -132,5 +163,84 @@ class Document extends Model
             'child_document_id',
             'parent_document_id'
         )->withPivot('relation_type')->withTimestamps();
+    }
+
+    /**
+     * Alias kompatibel dengan kode kamu sebelumnya:
+     * changedToDocuments() dan changedFromDocuments()
+     */
+    public function changedToDocuments()
+    {
+        return $this->relationsToChildren();
+    }
+
+    public function changedFromDocuments()
+    {
+        return $this->relationsToParents();
+    }
+
+    /* =======================
+     |  FILTERED RELATIONS (PENTING)
+     ======================= */
+
+    /**
+     * Dokumen ini DIUBAH menjadi dokumen lain (relation_type = changed_to)
+     */
+    public function changedToDocumentsOnly()
+    {
+        return $this->relationsToChildren()->wherePivot('relation_type', 'changed_to');
+    }
+
+    /**
+     * Dokumen ini TURUNAN klinik (relation_type = derived_clinic)
+     */
+    public function derivedClinicDocuments()
+    {
+        return $this->relationsToChildren()->wherePivot('relation_type', 'derived_clinic');
+    }
+
+    /**
+     * Dokumen ini hasil perubahan dari dokumen lain (parent) (relation_type = changed_to)
+     * biasanya cuma 1 parent.
+     */
+    public function changedFromDocumentOnly()
+    {
+        return $this->relationsToParents()->wherePivot('relation_type', 'changed_to');
+    }
+
+    /**
+     * Dokumen ini turunan dari dokumen master (parent) (relation_type = derived_clinic)
+     */
+    public function derivedFromMasterDocument()
+    {
+        return $this->relationsToParents()->wherePivot('relation_type', 'derived_clinic');
+    }
+
+    /* =======================
+     |  SINGLE HELPERS (BIAR ENAK DI BLADE)
+     ======================= */
+
+    /**
+     * Ambil 1 dokumen parent (diubah dari) kalau ada
+     */
+    public function getChangedFromAttribute(): ?self
+    {
+        return $this->changedFromDocumentOnly()->orderByDesc('documents.created_at')->first();
+    }
+
+    /**
+     * Ambil 1 dokumen child terakhir (hasil diubah) kalau ada
+     */
+    public function getChangedToLatestAttribute(): ?self
+    {
+        return $this->changedToDocumentsOnly()->orderByDesc('documents.created_at')->first();
+    }
+
+    /**
+     * Ambil semua turunan klinik (children)
+     */
+    public function getClinicDerivativesAttribute()
+    {
+        return $this->derivedClinicDocuments()->orderByDesc('documents.created_at')->get();
     }
 }
