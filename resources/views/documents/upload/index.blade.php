@@ -72,7 +72,7 @@
   $canDelete      = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.delete'));
   $canChangeToNew = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.change'));
 
-  $canDeriveClinic = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.derive_clinic'));
+  $canturunanclinic = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.derive_clinic'));
 @endphp
 
 <div class="row gy-4">
@@ -333,7 +333,7 @@
                               @endif
 
                               {{-- ✅ Turunan Klinik --}}
-                              @if($canDeriveClinic)
+                              @if($canturunanclinic)
                                 <td class="text-center">
                                   <button type="button"
                                           class="btn btn-sm btn-outline-info btn-derive-clinic"
@@ -429,7 +429,7 @@
 @endif
 
 {{-- ✅ ================== DERIVE CLINIC MODAL ================== --}}
-@if($canDeriveClinic)
+@if($canturunanclinic)
 <div class="modal fade" id="deriveClinicModal" tabindex="-1" aria-labelledby="deriveClinicModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content shadow-lg rounded-3">
