@@ -228,7 +228,7 @@
                             @endif
 
                             {{-- ✅ KOLOM BARU --}}
-                            @if($canDeriveClinic)
+                            @if($canturunanclinic)
                               <th class="text-center">Turunan Klinik</th>
                             @endif
 
