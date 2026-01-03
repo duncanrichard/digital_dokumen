@@ -40,6 +40,7 @@
   .child-item:hover { border-color: #667eea; background: rgba(102,126,234,.04); }
 
   .wa-type-badge { font-weight: 800; letter-spacing: .3px; }
+  .parent-row { display:flex; align-items:center; justify-content:space-between; gap:.5rem; margin-top:.6rem; }
 
   @media (max-width: 768px) {
     .header-gradient { padding: 1.5rem; }
@@ -148,7 +149,7 @@
             <div class="form-check form-switch">
               <input class="form-check-input" type="checkbox" id="checkAllDeps" style="cursor:pointer;">
               <label class="form-check-label fw-semibold" for="checkAllDeps" style="cursor:pointer;">
-                Select All Divisions (except main) for all documents
+                Select All Divisions for all documents
               </label>
             </div>
           </div>
@@ -238,12 +239,13 @@
                         ->values()->all();
                       $selectedChildrenCount = count($selectedChildrenIds);
 
-                      $isCheckedParent = $isPrimary
-                        || in_array($dep->id, $selectedForDoc, true)
+                      // ✅ card selected jika parent dipilih ATAU ada child dipilih
+                      $isCheckedParent = in_array($dep->id, $selectedForDoc, true)
                         || $selectedChildrenCount > 0;
 
                       $modalId = "modalChild_{$doc->id}_{$dep->id}";
-                      $wrapId  = "childInputWrap_{$doc->id}_{$dep->id}";
+                      $wrapIdChild  = "childInputWrap_{$doc->id}_{$dep->id}";
+                      $wrapIdParent = "parentInputWrap_{$doc->id}_{$dep->id}";
 
                       $waType = strtolower((string)($dep->wa_send_type ?? 'personal'));
                       $waTypeLabel = $waType === 'group' ? 'GROUP' : 'PERSONAL';
@@ -280,13 +282,29 @@
                             </div>
                           </div>
 
-                          {{-- ✅ badge khusus untuk selected status (tidak bentrok dengan wa-type badge) --}}
                           <span class="badge select-badge {{ $isCheckedParent ? 'bg-success' : 'bg-light text-muted' }} rounded-pill">
                             <i class="mdi {{ $isCheckedParent ? 'mdi-check' : 'mdi-plus' }}"></i>
                           </span>
                         </div>
 
+                        {{-- HAS CHILDREN --}}
                         @if($hasChildren)
+                          <div class="parent-row">
+                            <label class="form-check mb-0 d-flex align-items-center gap-2" style="cursor:pointer;">
+                              <input class="form-check-input parent-checkbox"
+                                     type="checkbox"
+                                     value="{{ $dep->id }}"
+                                     @checked(in_array($dep->id, $selectedForDoc, true))
+                                     data-primary="{{ $isPrimary ? 1 : 0 }}"
+                                     data-doc-id="{{ $doc->id }}"
+                                     data-parent-id="{{ $dep->id }}">
+                              <span class="form-check-label">Pilih Divisi</span>
+                            </label>
+                          </div>
+
+                          {{-- wrap hidden input untuk parent (dibuat via JS) --}}
+                          <div id="{{ $wrapIdParent }}"></div>
+
                           <div class="mt-2">
                             <button type="button"
                                     class="btn btn-sm btn-outline-primary w-100"
@@ -303,7 +321,7 @@
                             </button>
                           </div>
 
-                          <div id="{{ $wrapId }}">
+                          <div id="{{ $wrapIdChild }}">
                             @foreach($selectedChildrenIds as $cid)
                               <input type="hidden" name="distribution[{{ $doc->id }}][]" value="{{ $cid }}">
                             @endforeach
@@ -322,7 +340,6 @@
                                     @foreach($children as $child)
                                       @php
                                         $checked = in_array($child->id, $selectedForDoc, true);
-
                                         $cWaType = strtolower((string)($child->wa_send_type ?? 'personal'));
                                         $cWaTypeLabel = $cWaType === 'group' ? 'GROUP' : 'PERSONAL';
                                         $cWaBadge = $cWaType === 'group' ? 'bg-label-warning text-dark' : 'bg-label-primary';
@@ -364,22 +381,20 @@
                               </div>
                             </div>
                           </div>
+
+                        {{-- NO CHILDREN --}}
                         @else
                           <div class="form-check mt-2">
                             <input class="form-check-input dep-checkbox"
                                    type="checkbox"
                                    name="distribution[{{ $doc->id }}][]"
                                    value="{{ $dep->id }}"
-                                   @checked($isPrimary || in_array($dep->id, $selectedForDoc, true))
-                                   @if($isPrimary) disabled @endif
+                                   @checked(in_array($dep->id, $selectedForDoc, true))
                                    data-primary="{{ $isPrimary ? 1 : 0 }}">
                             <label class="form-check-label">Pilih</label>
-
-                            @if($isPrimary)
-                              <input type="hidden" name="distribution[{{ $doc->id }}][]" value="{{ $dep->id }}">
-                            @endif
                           </div>
                         @endif
+
                       </div>
                     </div>
                   @empty
@@ -393,15 +408,10 @@
                 </div>
               </div>
 
-              {{-- ✅ TAB DJC / OTHERS (untuk singkat: copy blok HOLDING lalu ganti $departments = $departmentsDjc / $departmentsOther)
-                   Karena kode kamu panjang, kamu cukup COPY blok HOLDING ini ke tab DJC & OTHERS, field wa_send_type sudah siap dipakai.
-              --}}
-
               {{-- DJC --}}
               <div class="tab-pane fade" id="{{ $paneDjc }}" role="tabpanel">
                 <div class="row g-3 deps-grid" data-doc-id="{{ $doc->id }}">
                   @php $departments = $departmentsDjc; @endphp
-                  {{-- ✅ Copy persis isi loop HOLDING di atas (forelse departments) --}}
                   @includeIf('documents.distribution._dept_loop', ['departments' => $departments, 'doc' => $doc, 'primaryId' => $primaryId, 'selectedForDoc' => $selectedForDoc])
                 </div>
               </div>
@@ -411,7 +421,6 @@
               <div class="tab-pane fade" id="{{ $paneOther }}" role="tabpanel">
                 <div class="row g-3 deps-grid" data-doc-id="{{ $doc->id }}">
                   @php $departments = $departmentsOther; @endphp
-                  {{-- ✅ Copy persis isi loop HOLDING di atas (forelse departments) --}}
                   @includeIf('documents.distribution._dept_loop', ['departments' => $departments, 'doc' => $doc, 'primaryId' => $primaryId, 'selectedForDoc' => $selectedForDoc])
                 </div>
               </div>
@@ -425,7 +434,7 @@
             <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start align-items-md-center">
               <div class="text-muted small">
                 <i class="mdi mdi-information-outline me-1"></i>
-                Main Division always included and cannot be unselected.
+                Main Division is optional now.
               </div>
 
               <div class="d-flex flex-column flex-md-row gap-3 align-items-stretch align-items-md-center">
@@ -484,7 +493,6 @@
     }
   }
 
-  // ✅ FIX: jangan ambil .badge pertama, tapi badge khusus status pilih
   function setCardSelected(card, selected) {
     const badge = card.querySelector('.select-badge');
     if (selected) {
@@ -502,6 +510,33 @@
     }
   }
 
+  function syncParentHiddenInput(docId, parentId, checked) {
+    const wrap = document.getElementById(`parentInputWrap_${docId}_${parentId}`);
+    if (!wrap) return;
+
+    wrap.innerHTML = '';
+    if (checked) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = `distribution[${docId}][]`;
+      input.value = parentId;
+      wrap.appendChild(input);
+    }
+  }
+
+  function getChildCount(docId, parentId) {
+    const badge = document.querySelector(`.child-count[data-doc-id="${docId}"][data-parent-id="${parentId}"]`);
+    const count = badge ? parseInt((badge.textContent || '0'), 10) : 0;
+    return isNaN(count) ? 0 : count;
+  }
+
+  function setChildCount(docId, parentId, count) {
+    const badge = document.querySelector(`.child-count[data-doc-id="${docId}"][data-parent-id="${parentId}"]`);
+    if (!badge) return;
+    badge.textContent = count;
+    badge.style.display = count > 0 ? '' : 'none';
+  }
+
   function initCheckAll() {
     const master = document.getElementById('checkAllDeps');
     if (!master) return;
@@ -509,13 +544,24 @@
     master.addEventListener('change', function() {
       const checked = master.checked;
 
+      // dep-checkbox (no children)
       document.querySelectorAll('.dep-checkbox').forEach(cb => {
-        if (cb.dataset.primary === '1') return;
         cb.checked = checked;
         const card = cb.closest('.dept-card');
         if (card) setCardSelected(card, cb.checked);
       });
 
+      // parent-checkbox (has children)
+      document.querySelectorAll('.parent-checkbox').forEach(cb => {
+        cb.checked = checked;
+        syncParentHiddenInput(cb.dataset.docId, cb.dataset.parentId, cb.checked);
+
+        const card = cb.closest('.dept-card');
+        const childCount = getChildCount(cb.dataset.docId, cb.dataset.parentId);
+        if (card) setCardSelected(card, cb.checked || childCount > 0);
+      });
+
+      // children inside modal
       document.querySelectorAll('.btn-save-child').forEach(btn => {
         const docId = btn.dataset.docId;
         const parentId = btn.dataset.parentId;
@@ -540,14 +586,14 @@
           }
         });
 
-        const badge = document.querySelector(`.child-count[data-doc-id="${docId}"][data-parent-id="${parentId}"]`);
-        if (badge) {
-          badge.textContent = count;
-          badge.style.display = count > 0 ? '' : 'none';
-        }
+        setChildCount(docId, parentId, count);
 
         const parentCard = document.querySelector(`.dept-card[data-doc-id="${docId}"][data-dept-id="${parentId}"]`);
-        if (parentCard) setCardSelected(parentCard, count > 0);
+        if (parentCard) {
+          const parentCb = parentCard.querySelector('.parent-checkbox');
+          const parentChecked = parentCb ? parentCb.checked : false;
+          setCardSelected(parentCard, parentChecked || count > 0);
+        }
       });
     });
   }
@@ -573,14 +619,14 @@
           wrap.appendChild(input);
         });
 
-        const badge = document.querySelector(`.child-count[data-doc-id="${docId}"][data-parent-id="${parentId}"]`);
-        if (badge) {
-          badge.textContent = checkedChildren.length;
-          badge.style.display = checkedChildren.length > 0 ? '' : 'none';
-        }
+        setChildCount(docId, parentId, checkedChildren.length);
 
         const parentCard = document.querySelector(`.dept-card[data-doc-id="${docId}"][data-dept-id="${parentId}"]`);
-        if (parentCard) setCardSelected(parentCard, checkedChildren.length > 0);
+        if (parentCard) {
+          const parentCb = parentCard.querySelector('.parent-checkbox');
+          const parentChecked = parentCb ? parentCb.checked : false;
+          setCardSelected(parentCard, parentChecked || checkedChildren.length > 0);
+        }
 
         const bsModal = bootstrap.Modal.getInstance(modal) || new bootstrap.Modal(modal);
         bsModal.hide();
@@ -589,9 +635,11 @@
   }
 
   function initNormalCheckboxVisual() {
+    // dep-checkbox visual
     document.querySelectorAll('.dep-checkbox').forEach(cb => {
       const card = cb.closest('.dept-card');
       if (!card) return;
+
       setCardSelected(card, cb.checked);
 
       cb.addEventListener('change', function () {
@@ -599,12 +647,32 @@
       });
     });
 
+    // parent cards visual
     document.querySelectorAll('.dept-card[data-has-children="1"]').forEach(card => {
       const docId = card.dataset.docId;
       const parentId = card.dataset.deptId;
-      const badge = document.querySelector(`.child-count[data-doc-id="${docId}"][data-parent-id="${parentId}"]`);
-      const count = badge ? parseInt((badge.textContent || '0'), 10) : 0;
-      setCardSelected(card, count > 0);
+      const parentCb = card.querySelector('.parent-checkbox');
+      const parentChecked = parentCb ? parentCb.checked : false;
+      const childCount = getChildCount(docId, parentId);
+      setCardSelected(card, parentChecked || childCount > 0);
+    });
+  }
+
+  function initParentCheckboxHandler() {
+    document.querySelectorAll('.parent-checkbox').forEach(cb => {
+      // init hidden parent untuk yang sudah checked dari server
+      syncParentHiddenInput(cb.dataset.docId, cb.dataset.parentId, cb.checked);
+
+      cb.addEventListener('change', function () {
+        const docId = cb.dataset.docId;
+        const parentId = cb.dataset.parentId;
+
+        syncParentHiddenInput(docId, parentId, cb.checked);
+
+        const card = cb.closest('.dept-card');
+        const childCount = getChildCount(docId, parentId);
+        if (card) setCardSelected(card, cb.checked || childCount > 0);
+      });
     });
   }
 
@@ -612,6 +680,7 @@
     initSelect2();
     initCheckAll();
     initChildModalSave();
+    initParentCheckboxHandler();
     initNormalCheckboxVisual();
   });
 })();

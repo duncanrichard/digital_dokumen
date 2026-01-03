@@ -124,87 +124,95 @@ class DocumentDistributionController extends Controller
     }
 
     public function store(Request $request)
-    {
-        $data = $request->validate([
-            'document_ids'   => ['required', 'array', 'min:1'],
-            'document_ids.*' => [
-                'uuid',
-                Rule::exists('documents', 'id')->where(fn($q) => $q->where('is_active', true)),
-            ],
+{
+    $data = $request->validate([
+        'document_ids'   => ['required', 'array', 'min:1'],
+        'document_ids.*' => [
+            'uuid',
+            Rule::exists('documents', 'id')->where(fn($q) => $q->where('is_active', true)),
+        ],
 
-            'distribution'     => ['nullable', 'array'],
-            'distribution.*'   => ['nullable', 'array'],
-            'distribution.*.*' => [
-                'uuid',
-                Rule::exists('departments', 'id')->where(fn($q) => $q->where('is_active', true)),
-            ],
+        'distribution'     => ['nullable', 'array'],
+        'distribution.*'   => ['nullable', 'array'],
+        'distribution.*.*' => [
+            'uuid',
+            Rule::exists('departments', 'id')->where(fn($q) => $q->where('is_active', true)),
+        ],
 
-            'send_whatsapp' => ['nullable', 'boolean'],
-        ]);
+        'send_whatsapp' => ['nullable', 'boolean'],
+    ]);
 
-        $documentIds = array_values(array_unique(array_map('strval', $data['document_ids'] ?? [])));
+    $documentIds = array_values(array_unique(array_map('strval', $data['document_ids'] ?? [])));
 
-        $documents = Document::whereIn('id', $documentIds)
-            ->where('is_active', true)
-            ->get();
+    $documents = Document::whereIn('id', $documentIds)
+        ->where('is_active', true)
+        ->get();
 
-        if ($documents->isEmpty()) {
-            return redirect()
-                ->route('documents.distribution.index')
-                ->withErrors(['document_ids' => 'Tidak ada dokumen yang valid/aktif.']);
-        }
-
-        $distributionInput = $data['distribution'] ?? [];
-
-        $perDocDeptIds = [];
-        foreach ($documents as $doc) {
-            $docId = (string) $doc->id;
-
-            $idsFromForm = $distributionInput[$docId] ?? [];
-            if (!is_array($idsFromForm)) $idsFromForm = [];
-            $idsFromForm = array_map('strval', $idsFromForm);
-
-            // main division selalu ikut
-            $primaryDeptId = $doc->department_id ? (string) $doc->department_id : null;
-            if ($primaryDeptId) $idsFromForm[] = $primaryDeptId;
-
-            $perDocDeptIds[$docId] = array_values(array_unique($idsFromForm));
-        }
-
-        DB::transaction(function () use ($perDocDeptIds) {
-            foreach ($perDocDeptIds as $documentId => $deptIds) {
-                DocumentDistribution::where('document_id', $documentId)->delete();
-
-                if (!empty($deptIds)) {
-                    $now = now();
-                    $rows = [];
-                    foreach ($deptIds as $deptId) {
-                        $rows[] = [
-                            'document_id'   => $documentId,
-                            'department_id' => $deptId,
-                            'is_active'     => true,
-                            'created_at'    => $now,
-                            'updated_at'    => $now,
-                        ];
-                    }
-                    DocumentDistribution::insert($rows);
-                }
-            }
-        });
-
-        $sendWa = $request->boolean('send_whatsapp');
-        if ($sendWa) {
-            $this->sendWhatsappNotifications($documents, $perDocDeptIds);
-        }
-
-        $successMsg = $sendWa
-            ? 'Distribusi dokumen berhasil disimpan & notifikasi WA terkirim.'
-            : 'Distribusi dokumen berhasil disimpan tanpa mengirim WA.';
-
+    if ($documents->isEmpty()) {
         return redirect()
-            ->route('documents.distribution.index', ['document_ids' => $documentIds])
-            ->with('success', $successMsg);
+            ->route('documents.distribution.index')
+            ->withErrors(['document_ids' => 'Tidak ada dokumen yang valid/aktif.']);
     }
+
+    $distributionInput = $data['distribution'] ?? [];
+
+    $perDocDeptIds = [];
+    foreach ($documents as $doc) {
+        $docId = (string) $doc->id;
+
+        $idsFromForm = $distributionInput[$docId] ?? [];
+        if (!is_array($idsFromForm)) $idsFromForm = [];
+
+        // ✅ Normalisasi: string, unique, buang kosong
+        $idsFromForm = array_values(array_unique(array_filter(array_map('strval', $idsFromForm))));
+
+        /**
+         * ✅ PENTING:
+         * - Main division TIDAK dipaksa ikut lagi.
+         * - Jadi kalau user hanya pilih cabang, parent tidak akan tersimpan & tidak akan terkirim WA.
+         */
+
+        $perDocDeptIds[$docId] = $idsFromForm;
+    }
+
+    DB::transaction(function () use ($perDocDeptIds) {
+        foreach ($perDocDeptIds as $documentId => $deptIds) {
+            // hapus dulu semua distribusi lama
+            DocumentDistribution::where('document_id', $documentId)->delete();
+
+            // insert yang baru (sesuai pilihan user)
+            if (!empty($deptIds)) {
+                $now = now();
+                $rows = [];
+                foreach ($deptIds as $deptId) {
+                    $rows[] = [
+                        'document_id'   => $documentId,
+                        'department_id' => $deptId,
+                        'is_active'     => true,
+                        'created_at'    => $now,
+                        'updated_at'    => $now,
+                    ];
+                }
+                DocumentDistribution::insert($rows);
+            }
+        }
+    });
+
+    $sendWa = $request->boolean('send_whatsapp');
+    if ($sendWa) {
+        // ✅ WA hanya ke deptIds yang dipilih user
+        $this->sendWhatsappNotifications($documents, $perDocDeptIds);
+    }
+
+    $successMsg = $sendWa
+        ? 'Distribusi dokumen berhasil disimpan & notifikasi WA terkirim.'
+        : 'Distribusi dokumen berhasil disimpan tanpa mengirim WA.';
+
+    return redirect()
+        ->route('documents.distribution.index', ['document_ids' => $documentIds])
+        ->with('success', $successMsg);
+}
+
 
     /**
      * ✅ Normalisasi nomor WA:
