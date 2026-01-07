@@ -53,7 +53,6 @@ class DepartmentController extends Controller
             $officeType = 'holding';
         }
 
-        // ✅ tampilkan divisi UTAMA saja
         $items = Department::query()
             ->where('office_type', $officeType)
             ->whereNull('parent_id')
@@ -78,56 +77,70 @@ class DepartmentController extends Controller
      * ✅ DIVISI UTAMA (PARENT)
      * =========================================================== */
 
-   public function store(Request $request)
-{
-    $validated = $request->validate([
-        'office_type'   => ['required', 'in:holding,djc'],
-        'wa_send_type'  => ['required', 'in:group,personal'], // ✅ tambah
-        'code'          => ['required', 'max:20', 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/', 'unique:departments,code'],
-        'name'          => ['required', 'max:100'],
-        'description'   => ['nullable', 'max:1000'],
-        'no_wa'         => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
-        'is_active'     => ['required', 'boolean'],
-    ]);
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'office_type'   => ['required', 'in:holding,djc'],
+            'wa_send_type'  => ['required', 'in:group,personal'],
 
-    $validated['parent_id'] = null;
+            // ✅ NEW (wajib kalau group)
+            'fonnte_token'  => ['nullable', 'string', 'max:255', 'required_if:wa_send_type,group'],
 
-    Department::create($validated);
+            'code'          => ['required', 'max:20', 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/', 'unique:departments,code'],
+            'name'          => ['required', 'max:100'],
+            'description'   => ['nullable', 'max:1000'],
+            'no_wa'         => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+            'is_active'     => ['required', 'boolean'],
+        ]);
 
-    return redirect()
-        ->route('master.departments.index', ['office_type' => $validated['office_type']])
-        ->with('success', 'Divisi utama berhasil dibuat.');
-}
+        $validated['parent_id'] = null;
 
+        // kalau personal, token tidak dipakai
+        if (($validated['wa_send_type'] ?? 'personal') !== 'group') {
+            $validated['fonnte_token'] = null;
+        }
 
-   public function update(Request $request, Department $department)
-{
-    $validated = $request->validate([
-        'office_type'   => ['required', 'in:holding,djc'],
-        'wa_send_type'  => ['required', 'in:group,personal'], // ✅ tambah
-        'code'          => ['required', 'max:20', 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/', 'unique:departments,code,' . $department->id],
-        'name'          => ['required', 'max:100'],
-        'description'   => ['nullable', 'max:1000'],
-        'no_wa'         => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
-        'is_active'     => ['required', 'boolean'],
-    ]);
+        Department::create($validated);
 
-    $validated['parent_id'] = $department->parent_id;
+        return redirect()
+            ->route('master.departments.index', ['office_type' => $validated['office_type']])
+            ->with('success', 'Divisi utama berhasil dibuat.');
+    }
 
-    $department->update($validated);
+    public function update(Request $request, Department $department)
+    {
+        $validated = $request->validate([
+            'office_type'   => ['required', 'in:holding,djc'],
+            'wa_send_type'  => ['required', 'in:group,personal'],
 
-    return redirect()
-        ->route('master.departments.index', ['office_type' => $validated['office_type']])
-        ->with('success', 'Divisi utama berhasil diupdate.');
-}
+            // ✅ NEW (wajib kalau group)
+            'fonnte_token'  => ['nullable', 'string', 'max:255', 'required_if:wa_send_type,group'],
 
+            'code'          => ['required', 'max:20', 'regex:/^[A-Za-z0-9\-\_.,\/ ]+$/', 'unique:departments,code,' . $department->id],
+            'name'          => ['required', 'max:100'],
+            'description'   => ['nullable', 'max:1000'],
+            'no_wa'         => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+            'is_active'     => ['required', 'boolean'],
+        ]);
+
+        $validated['parent_id'] = $department->parent_id;
+
+        if (($validated['wa_send_type'] ?? 'personal') !== 'group') {
+            $validated['fonnte_token'] = null;
+        }
+
+        $department->update($validated);
+
+        return redirect()
+            ->route('master.departments.index', ['office_type' => $validated['office_type']])
+            ->with('success', 'Divisi utama berhasil diupdate.');
+    }
 
     public function destroy(Request $request, Department $department)
     {
         $officeType = $request->get('office_type', $department->office_type ?? 'holding');
         if (!in_array($officeType, ['holding', 'djc'], true)) $officeType = 'holding';
 
-        // ✅ kalau parent dihapus, hapus semua detailnya juga
         if (is_null($department->parent_id)) {
             Department::where('parent_id', $department->id)->delete();
         }
@@ -141,73 +154,84 @@ class DepartmentController extends Controller
 
     /* ===========================================================
      * ✅ DETAIL / CABANG (CHILD)
-     * - Tidak perlu code
-     * - Tidak tampil di index (karena parent_id != null)
      * =========================================================== */
 
-    // POST /master/departments/{department}/details
     public function storeDetail(Request $request, Department $department)
-{
-    if (!is_null($department->parent_id)) {
-        abort(422, 'Department yang dipilih bukan divisi utama.');
+    {
+        if (!is_null($department->parent_id)) {
+            abort(422, 'Department yang dipilih bukan divisi utama.');
+        }
+
+        $validated = $request->validate([
+            'name'         => ['required', 'max:100'],
+            'wa_send_type' => ['required', 'in:group,personal'],
+
+            // ✅ NEW (wajib kalau group)
+            'fonnte_token' => ['nullable', 'string', 'max:255', 'required_if:wa_send_type,group'],
+
+            'description'  => ['nullable', 'max:1000'],
+            'no_wa'        => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+            'is_active'    => ['required', 'boolean'],
+        ]);
+
+        $fonnteToken = ($validated['wa_send_type'] === 'group')
+            ? ($validated['fonnte_token'] ?? null)
+            : null;
+
+        Department::create([
+            'office_type'   => $department->office_type,
+            'parent_id'     => $department->id,
+            'code'          => null,
+            'name'          => $validated['name'],
+            'wa_send_type'  => $validated['wa_send_type'],
+            'fonnte_token'  => $fonnteToken, // ✅ NEW
+            'description'   => $validated['description'] ?? null,
+            'no_wa'         => $validated['no_wa'] ?? null,
+            'is_active'     => $validated['is_active'],
+        ]);
+
+        return redirect()
+            ->route('master.departments.index', ['office_type' => $department->office_type])
+            ->with('success', 'Detail divisi berhasil ditambahkan.');
     }
 
-    $validated = $request->validate([
-        'name'         => ['required', 'max:100'],
-        'wa_send_type' => ['required', 'in:group,personal'], // ✅ tambah
-        'description'  => ['nullable', 'max:1000'],
-        'no_wa'        => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
-        'is_active'    => ['required', 'boolean'],
-    ]);
-
-    Department::create([
-        'office_type'   => $department->office_type,
-        'parent_id'     => $department->id,
-        'code'          => null,
-        'name'          => $validated['name'],
-        'wa_send_type'  => $validated['wa_send_type'], // ✅ simpan
-        'description'   => $validated['description'] ?? null,
-        'no_wa'         => $validated['no_wa'] ?? null,
-        'is_active'     => $validated['is_active'],
-    ]);
-
-    return redirect()
-        ->route('master.departments.index', ['office_type' => $department->office_type])
-        ->with('success', 'Detail divisi berhasil ditambahkan.');
-}
-
-
-    // PUT /master/departments/details/{detail}
     public function updateDetail(Request $request, Department $detail)
-{
-    if (is_null($detail->parent_id)) {
-        abort(422, 'Yang dipilih bukan detail divisi.');
+    {
+        if (is_null($detail->parent_id)) {
+            abort(422, 'Yang dipilih bukan detail divisi.');
+        }
+
+        $validated = $request->validate([
+            'name'         => ['required', 'max:100'],
+            'wa_send_type' => ['required', 'in:group,personal'],
+
+            // ✅ NEW (wajib kalau group)
+            'fonnte_token' => ['nullable', 'string', 'max:255', 'required_if:wa_send_type,group'],
+
+            'description'  => ['nullable', 'max:1000'],
+            'no_wa'        => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
+            'is_active'    => ['required', 'boolean'],
+        ]);
+
+        $fonnteToken = ($validated['wa_send_type'] === 'group')
+            ? ($validated['fonnte_token'] ?? null)
+            : null;
+
+        $detail->update([
+            'name'         => $validated['name'],
+            'wa_send_type' => $validated['wa_send_type'],
+            'fonnte_token' => $fonnteToken, // ✅ NEW
+            'description'  => $validated['description'] ?? null,
+            'no_wa'        => $validated['no_wa'] ?? null,
+            'is_active'    => $validated['is_active'],
+            'code'         => null,
+        ]);
+
+        return redirect()
+            ->route('master.departments.index', ['office_type' => $detail->office_type])
+            ->with('success', 'Detail divisi berhasil diupdate.');
     }
 
-    $validated = $request->validate([
-        'name'         => ['required', 'max:100'],
-        'wa_send_type' => ['required', 'in:group,personal'], // ✅ tambah
-        'description'  => ['nullable', 'max:1000'],
-        'no_wa'        => ['nullable', 'max:25', 'regex:/^[0-9+\-\s()]+$/'],
-        'is_active'    => ['required', 'boolean'],
-    ]);
-
-    $detail->update([
-        'name'        => $validated['name'],
-        'wa_send_type'=> $validated['wa_send_type'], // ✅ update
-        'description' => $validated['description'] ?? null,
-        'no_wa'       => $validated['no_wa'] ?? null,
-        'is_active'   => $validated['is_active'],
-        'code'        => null,
-    ]);
-
-    return redirect()
-        ->route('master.departments.index', ['office_type' => $detail->office_type])
-        ->with('success', 'Detail divisi berhasil diupdate.');
-}
-
-
-    // DELETE /master/departments/details/{detail}
     public function destroyDetail(Request $request, Department $detail)
     {
         if (is_null($detail->parent_id)) {

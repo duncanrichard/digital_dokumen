@@ -31,11 +31,9 @@
     return $parentName !== '' ? ($parentName . ' ' . $childName) : $childName;
   };
 
-  // ✅ tambah 1 kolom "Jenis WA"
   // kolom: #, Office, Code, Name, Description, No. WA, Jenis WA, Status, Detail, Actions
-  $colspan = ($canUpdate || $canDelete) ? 10 : 9; // default lama
-  // ✅ sekarang ada 1 kolom tambahan => +1
-  $colspan = $colspan + 1;
+  $colspan = ($canUpdate || $canDelete) ? 10 : 9;
+  $colspan = $colspan + 1; // Jenis WA
 @endphp
 
 <div class="row gy-4">
@@ -105,7 +103,7 @@
               <th>Name</th>
               <th>Description</th>
               <th style="width:160px;">No. WA</th>
-              <th style="width:110px;">Jenis WA</th> {{-- ✅ new --}}
+              <th style="width:110px;">Jenis WA</th>
               <th style="width:110px;">Status</th>
               <th style="width:260px;">Detail</th>
               @if($canUpdate || $canDelete)
@@ -151,7 +149,6 @@
                   {!! $row->no_wa ? '<span class="fw-medium">'.$row->no_wa.'</span>' : '<span class="text-muted">-</span>' !!}
                 </td>
 
-                {{-- ✅ Jenis WA --}}
                 <td>
                   @if($waType === 'group')
                     <span class="badge bg-label-primary rounded-pill">Group</span>
@@ -168,7 +165,6 @@
                   @endif
                 </td>
 
-                {{-- DETAIL INLINE (collapse) --}}
                 <td>
                   <div class="d-flex flex-wrap gap-2">
                     <button type="button"
@@ -232,7 +228,7 @@
                               <th style="width:60px;">#</th>
                               <th>Name</th>
                               <th style="width:160px;">No. WA</th>
-                              <th style="width:110px;">Jenis WA</th> {{-- ✅ new --}}
+                              <th style="width:110px;">Jenis WA</th>
                               <th style="width:110px;">Status</th>
                               <th style="width:130px;" class="text-end">Actions</th>
                             </tr>
@@ -250,7 +246,6 @@
                                 </td>
                                 <td>{{ $child->no_wa ?: '-' }}</td>
 
-                                {{-- ✅ child jenis WA --}}
                                 <td>
                                   @if($childWaType === 'group')
                                     <span class="badge bg-label-primary rounded-pill">Group</span>
@@ -314,7 +309,6 @@
                                         </div>
 
                                         <div class="modal-body pt-0">
-
                                           <div class="mb-3">
                                             <label class="form-label required">Nama Detail</label>
                                             <input type="text"
@@ -328,14 +322,31 @@
                                             </div>
                                           </div>
 
-                                          {{-- ✅ Jenis WA --}}
+                                          {{-- Jenis WA --}}
                                           <div class="mb-3">
                                             <label class="form-label required">Jenis Divisi (WA)</label>
-                                            <select name="wa_send_type" class="form-select" required>
-                                              @php $v = old('wa_send_type', $child->wa_send_type ?? $row->wa_send_type ?? 'personal'); @endphp
+                                            @php $v = old('wa_send_type', $child->wa_send_type ?? $row->wa_send_type ?? 'personal'); @endphp
+                                            <select name="wa_send_type"
+                                                    class="form-select js-wa-type"
+                                                    data-token-wrap="#tokenWrap-editDetail-{{ $child->id }}"
+                                                    data-token-input="#tokenInput-editDetail-{{ $child->id }}"
+                                                    required>
                                               <option value="personal" {{ $v==='personal'?'selected':'' }}>Personal</option>
                                               <option value="group" {{ $v==='group'?'selected':'' }}>Group</option>
                                             </select>
+                                          </div>
+
+                                          {{-- ✅ Fonnte Token (show jika group) --}}
+                                          <div class="mb-3 js-token-wrap" id="tokenWrap-editDetail-{{ $child->id }}" style="display:none;">
+                                            <label class="form-label required">Fonnte API Token</label>
+                                            <input type="text"
+                                                   id="tokenInput-editDetail-{{ $child->id }}"
+                                                   name="fonnte_token"
+                                                   class="form-control @error('fonnte_token') is-invalid @enderror"
+                                                   value="{{ old('fonnte_token', $child->fonnte_token) }}"
+                                                   placeholder="Masukkan token Fonnte (wajib jika Group)">
+                                            @error('fonnte_token')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                                            <div class="form-text">Wajib jika <strong>Jenis WA = Group</strong>.</div>
                                           </div>
 
                                           <div class="mb-3">
@@ -410,14 +421,31 @@
                               <input type="text" name="name" class="form-control" required placeholder="Contoh: Jangli" value="{{ old('name') }}">
                             </div>
 
-                            {{-- ✅ Jenis WA --}}
+                            {{-- Jenis WA --}}
                             <div class="mb-3">
                               <label class="form-label required">Jenis Divisi (WA)</label>
                               @php $v = old('wa_send_type', $row->wa_send_type ?? 'personal'); @endphp
-                              <select name="wa_send_type" class="form-select" required>
+                              <select name="wa_send_type"
+                                      class="form-select js-wa-type"
+                                      data-token-wrap="#tokenWrap-createDetail-{{ $row->id }}"
+                                      data-token-input="#tokenInput-createDetail-{{ $row->id }}"
+                                      required>
                                 <option value="personal" {{ $v==='personal'?'selected':'' }}>Personal</option>
                                 <option value="group" {{ $v==='group'?'selected':'' }}>Group</option>
                               </select>
+                            </div>
+
+                            {{-- ✅ Fonnte Token --}}
+                            <div class="mb-3 js-token-wrap" id="tokenWrap-createDetail-{{ $row->id }}" style="display:none;">
+                              <label class="form-label required">Fonnte API Token</label>
+                              <input type="text"
+                                     id="tokenInput-createDetail-{{ $row->id }}"
+                                     name="fonnte_token"
+                                     class="form-control @error('fonnte_token') is-invalid @enderror"
+                                     value="{{ old('fonnte_token') }}"
+                                     placeholder="Masukkan token Fonnte (wajib jika Group)">
+                              @error('fonnte_token')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                              <div class="form-text">Wajib jika <strong>Jenis WA = Group</strong>.</div>
                             </div>
 
                             <div class="mb-3">
@@ -478,14 +506,31 @@
                               </select>
                             </div>
 
-                            {{-- ✅ Jenis WA --}}
+                            {{-- Jenis WA --}}
                             <div class="mb-3">
                               <label class="form-label required">Jenis Divisi (WA)</label>
                               @php $v = old('wa_send_type', $row->wa_send_type ?? 'personal'); @endphp
-                              <select name="wa_send_type" class="form-select" required>
+                              <select name="wa_send_type"
+                                      class="form-select js-wa-type"
+                                      data-token-wrap="#tokenWrap-editParent-{{ $row->id }}"
+                                      data-token-input="#tokenInput-editParent-{{ $row->id }}"
+                                      required>
                                 <option value="personal" {{ $v==='personal'?'selected':'' }}>Personal</option>
                                 <option value="group" {{ $v==='group'?'selected':'' }}>Group</option>
                               </select>
+                            </div>
+
+                            {{-- ✅ Fonnte Token --}}
+                            <div class="mb-3 js-token-wrap" id="tokenWrap-editParent-{{ $row->id }}" style="display:none;">
+                              <label class="form-label required">Fonnte API Token</label>
+                              <input type="text"
+                                     id="tokenInput-editParent-{{ $row->id }}"
+                                     name="fonnte_token"
+                                     class="form-control @error('fonnte_token') is-invalid @enderror"
+                                     value="{{ old('fonnte_token', $row->fonnte_token) }}"
+                                     placeholder="Masukkan token Fonnte (wajib jika Group)">
+                              @error('fonnte_token')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                              <div class="form-text">Wajib jika <strong>Jenis WA = Group</strong>.</div>
                             </div>
 
                             <div class="mb-3">
@@ -597,14 +642,32 @@
               @error('office_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
             </div>
 
-            {{-- ✅ Jenis WA --}}
+            {{-- Jenis WA --}}
             <div class="mb-3">
               <label class="form-label required">Jenis Divisi (WA)</label>
-              <select name="wa_send_type" class="form-select @error('wa_send_type') is-invalid @enderror" required>
-                <option value="personal" {{ old('wa_send_type','personal')=='personal'?'selected':'' }}>Personal</option>
-                <option value="group" {{ old('wa_send_type')=='group'?'selected':'' }}>Group</option>
+              @php $v = old('wa_send_type','personal'); @endphp
+              <select name="wa_send_type"
+                      class="form-select js-wa-type"
+                      data-token-wrap="#tokenWrap-createParent"
+                      data-token-input="#tokenInput-createParent"
+                      required>
+                <option value="personal" {{ $v==='personal'?'selected':'' }}>Personal</option>
+                <option value="group" {{ $v==='group'?'selected':'' }}>Group</option>
               </select>
               @error('wa_send_type')<div class="invalid-feedback">{{ $message }}</div>@enderror
+            </div>
+
+            {{-- ✅ Fonnte Token --}}
+            <div class="mb-3 js-token-wrap" id="tokenWrap-createParent" style="display:none;">
+              <label class="form-label required">Fonnte API Token</label>
+              <input type="text"
+                     id="tokenInput-createParent"
+                     name="fonnte_token"
+                     class="form-control @error('fonnte_token') is-invalid @enderror"
+                     value="{{ old('fonnte_token') }}"
+                     placeholder="Masukkan token Fonnte (wajib jika Group)">
+              @error('fonnte_token')<div class="invalid-feedback">{{ $message }}</div>@enderror
+              <div class="form-text">Wajib jika <strong>Jenis WA = Group</strong>.</div>
             </div>
 
             <div class="mb-3">
@@ -662,7 +725,7 @@
   </div>
 @endif
 
-{{-- ✅ semua modal detail/edit parent dari @push('modals') ditaruh di sini (DI LUAR TABLE) --}}
+{{-- semua modal detail/edit parent dari @push('modals') --}}
 @stack('modals')
 @endsection
 
@@ -675,6 +738,45 @@
 
 @section('page-script')
 <script>
+  // ========= Helper: toggle token field based on WA type =========
+  function toggleFonnteToken(selectEl) {
+    if (!selectEl) return;
+
+    const wrapSelector = selectEl.getAttribute('data-token-wrap');
+    const inputSelector = selectEl.getAttribute('data-token-input');
+
+    const wrap = wrapSelector ? document.querySelector(wrapSelector) : null;
+    const input = inputSelector ? document.querySelector(inputSelector) : null;
+
+    const isGroup = (selectEl.value || '').toLowerCase() === 'group';
+
+    if (wrap) wrap.style.display = isGroup ? '' : 'none';
+    if (input) {
+      input.required = isGroup;
+      if (!isGroup) input.value = '';
+    }
+  }
+
+  function initFonnteToggle(scope) {
+    const root = scope || document;
+    root.querySelectorAll('.js-wa-type').forEach((el) => {
+      // init on load
+      toggleFonnteToken(el);
+      // on change
+      el.addEventListener('change', () => toggleFonnteToken(el));
+    });
+  }
+
+  // init on DOM ready
+  document.addEventListener('DOMContentLoaded', function () {
+    initFonnteToggle(document);
+
+    // kalau modal dibuka, pastikan toggle jalan (untuk modal yang baru dirender)
+    document.querySelectorAll('.modal').forEach((m) => {
+      m.addEventListener('shown.bs.modal', () => initFonnteToggle(m));
+    });
+  });
+
   // Auto-open Create modal on validation fail (divisi utama)
   @if($errors->any() && old('_from') === 'create')
     const createModalEl = document.getElementById('createModal');
@@ -687,7 +789,6 @@
     const collapseEl = document.getElementById('detailRow-' + pid);
     if (collapseEl) new bootstrap.Collapse(collapseEl, { toggle: true });
 
-    // buka modal create detail
     @if(old('_from') === 'detail_create')
       const m1 = document.getElementById('createDetailModal-' + pid);
       if (m1) new bootstrap.Modal(m1).show();

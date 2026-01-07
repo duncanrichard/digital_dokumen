@@ -24,10 +24,15 @@ class Department extends Model
         'no_wa',
         'is_active',
         'wa_send_type',
+        'fonnte_token',  
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+
+        // ✅ Opsional (recommended) - Laravel 9/10+:
+        // token akan disimpan terenkripsi di DB
+        'fonnte_token' => 'encrypted',
     ];
 
     protected static function boot()

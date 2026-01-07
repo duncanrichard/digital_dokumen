@@ -15,15 +15,9 @@ use Illuminate\Support\Facades\Log;
 class DocumentDistributionController extends Controller
 {
     /**
-     * ✅ Token Fonnte (Authorization)
-     * Ini TOKEN untuk API-nya (bukan target).
+     * ✅ Token API Fonnte (Authorization) - TETAP SAMA
      */
-    private string $FONNTE_TOKEN = 'XMYGkswnarUgtUu6BSnh';
-
-    /**
-     * ✅ Target Group (jika wa_send_type = group)
-     */
-    private string $FONNTE_GROUP_TARGET = '120363404395085332@g.us';
+    private string $FONNTE_TOKEN = 'PhGFz3Zruiy64MDAcKEf';
 
     public function __construct()
     {
@@ -78,7 +72,7 @@ class DocumentDistributionController extends Controller
 
         $selectedDocs = $docs->whereIn('id', $documentIds)->values();
 
-        // ✅ ambil PARENT + children (aktif) + wa_send_type
+        // ✅ ambil PARENT + children (aktif) + wa_send_type + fonnte_token (group id)
         $parents = Department::query()
             ->where('is_active', true)
             ->whereNull('parent_id')
@@ -90,15 +84,15 @@ class DocumentDistributionController extends Controller
             }])
             ->orderBy('office_type')
             ->orderBy('name')
-            ->get(['id', 'name', 'office_type', 'no_wa', 'wa_send_type']);
+            ->get(['id', 'name', 'office_type', 'no_wa', 'wa_send_type', 'fonnte_token']);
 
         $departmentsHolding = $parents->where('office_type', 'holding')->values();
         $departmentsDjc     = $parents->where('office_type', 'djc')->values();
         $departmentsOther   = $parents->whereNotIn('office_type', ['holding', 'djc'])->values();
 
-        // ✅ untuk badge "Main Division" dll + include wa_send_type
+        // ✅ include fonnte_token juga
         $departmentsById = Department::where('is_active', true)
-            ->get(['id','name','office_type','parent_id','no_wa','wa_send_type'])
+            ->get(['id','name','office_type','parent_id','no_wa','wa_send_type','fonnte_token'])
             ->keyBy('id');
 
         $selectedDepartmentsByDoc = [];
@@ -124,103 +118,91 @@ class DocumentDistributionController extends Controller
     }
 
     public function store(Request $request)
-{
-    $data = $request->validate([
-        'document_ids'   => ['required', 'array', 'min:1'],
-        'document_ids.*' => [
-            'uuid',
-            Rule::exists('documents', 'id')->where(fn($q) => $q->where('is_active', true)),
-        ],
+    {
+        $data = $request->validate([
+            'document_ids'   => ['required', 'array', 'min:1'],
+            'document_ids.*' => [
+                'uuid',
+                Rule::exists('documents', 'id')->where(fn($q) => $q->where('is_active', true)),
+            ],
 
-        'distribution'     => ['nullable', 'array'],
-        'distribution.*'   => ['nullable', 'array'],
-        'distribution.*.*' => [
-            'uuid',
-            Rule::exists('departments', 'id')->where(fn($q) => $q->where('is_active', true)),
-        ],
+            'distribution'     => ['nullable', 'array'],
+            'distribution.*'   => ['nullable', 'array'],
+            'distribution.*.*' => [
+                'uuid',
+                Rule::exists('departments', 'id')->where(fn($q) => $q->where('is_active', true)),
+            ],
 
-        'send_whatsapp' => ['nullable', 'boolean'],
-    ]);
+            'send_whatsapp' => ['nullable', 'boolean'],
+        ]);
 
-    $documentIds = array_values(array_unique(array_map('strval', $data['document_ids'] ?? [])));
+        $documentIds = array_values(array_unique(array_map('strval', $data['document_ids'] ?? [])));
 
-    $documents = Document::whereIn('id', $documentIds)
-        ->where('is_active', true)
-        ->get();
+        $documents = Document::whereIn('id', $documentIds)
+            ->where('is_active', true)
+            ->get();
 
-    if ($documents->isEmpty()) {
-        return redirect()
-            ->route('documents.distribution.index')
-            ->withErrors(['document_ids' => 'Tidak ada dokumen yang valid/aktif.']);
-    }
-
-    $distributionInput = $data['distribution'] ?? [];
-
-    $perDocDeptIds = [];
-    foreach ($documents as $doc) {
-        $docId = (string) $doc->id;
-
-        $idsFromForm = $distributionInput[$docId] ?? [];
-        if (!is_array($idsFromForm)) $idsFromForm = [];
-
-        // ✅ Normalisasi: string, unique, buang kosong
-        $idsFromForm = array_values(array_unique(array_filter(array_map('strval', $idsFromForm))));
-
-        /**
-         * ✅ PENTING:
-         * - Main division TIDAK dipaksa ikut lagi.
-         * - Jadi kalau user hanya pilih cabang, parent tidak akan tersimpan & tidak akan terkirim WA.
-         */
-
-        $perDocDeptIds[$docId] = $idsFromForm;
-    }
-
-    DB::transaction(function () use ($perDocDeptIds) {
-        foreach ($perDocDeptIds as $documentId => $deptIds) {
-            // hapus dulu semua distribusi lama
-            DocumentDistribution::where('document_id', $documentId)->delete();
-
-            // insert yang baru (sesuai pilihan user)
-            if (!empty($deptIds)) {
-                $now = now();
-                $rows = [];
-                foreach ($deptIds as $deptId) {
-                    $rows[] = [
-                        'document_id'   => $documentId,
-                        'department_id' => $deptId,
-                        'is_active'     => true,
-                        'created_at'    => $now,
-                        'updated_at'    => $now,
-                    ];
-                }
-                DocumentDistribution::insert($rows);
-            }
+        if ($documents->isEmpty()) {
+            return redirect()
+                ->route('documents.distribution.index')
+                ->withErrors(['document_ids' => 'Tidak ada dokumen yang valid/aktif.']);
         }
-    });
 
-    $sendWa = $request->boolean('send_whatsapp');
-    if ($sendWa) {
-        // ✅ WA hanya ke deptIds yang dipilih user
-        $this->sendWhatsappNotifications($documents, $perDocDeptIds);
+        $distributionInput = $data['distribution'] ?? [];
+
+        // docId => deptIds yang dipilih user
+        $perDocDeptIds = [];
+        foreach ($documents as $doc) {
+            $docId = (string) $doc->id;
+
+            $idsFromForm = $distributionInput[$docId] ?? [];
+            if (!is_array($idsFromForm)) $idsFromForm = [];
+
+            $idsFromForm = array_values(array_unique(array_filter(array_map('strval', $idsFromForm))));
+            $perDocDeptIds[$docId] = $idsFromForm;
+        }
+
+        DB::transaction(function () use ($perDocDeptIds) {
+            foreach ($perDocDeptIds as $documentId => $deptIds) {
+                DocumentDistribution::where('document_id', $documentId)->delete();
+
+                if (!empty($deptIds)) {
+                    $now = now();
+                    $rows = [];
+                    foreach ($deptIds as $deptId) {
+                        $rows[] = [
+                            'document_id'   => $documentId,
+                            'department_id' => $deptId,
+                            'is_active'     => true,
+                            'created_at'    => $now,
+                            'updated_at'    => $now,
+                        ];
+                    }
+                    DocumentDistribution::insert($rows);
+                }
+            }
+        });
+
+        $sendWa = $request->boolean('send_whatsapp');
+        if ($sendWa) {
+            $this->sendWhatsappNotifications($documents, $perDocDeptIds);
+        }
+
+        $successMsg = $sendWa
+            ? 'Distribusi dokumen berhasil disimpan & notifikasi WA terkirim.'
+            : 'Distribusi dokumen berhasil disimpan tanpa mengirim WA.';
+
+        return redirect()
+            ->route('documents.distribution.index', ['document_ids' => $documentIds])
+            ->with('success', $successMsg);
     }
-
-    $successMsg = $sendWa
-        ? 'Distribusi dokumen berhasil disimpan & notifikasi WA terkirim.'
-        : 'Distribusi dokumen berhasil disimpan tanpa mengirim WA.';
-
-    return redirect()
-        ->route('documents.distribution.index', ['document_ids' => $documentIds])
-        ->with('success', $successMsg);
-}
-
 
     /**
-     * ✅ Normalisasi nomor WA:
+     * ✅ Normalisasi target WA:
+     * - jika @g.us => biarkan
      * - 0812xxx -> 62812xxx
-     * - 812xxx  -> 62812xxx
      * - +62812xxx -> 62812xxx
-     * - hapus spasi / strip / dll
-     * - kalau target group @g.us: biarkan
+     * - hapus spasi/dll
      */
     protected function normalizeWaTarget(string $target): string
     {
@@ -240,34 +222,37 @@ class DocumentDistributionController extends Controller
     }
 
     /**
-     * ✅ Kirim WA berdasarkan wa_send_type:
-     * - group    -> kirim ke $this->FONNTE_GROUP_TARGET
-     * - personal -> kirim ke no_wa dept
+     * ✅ Kirim WA sesuai pilihan user:
+     * - personal: target = departments.no_wa
+     * - group   : target = departments.fonnte_token (isi: 1203xxx@g.us)
+     *
+     * Authorization tetap pakai $this->FONNTE_TOKEN
      */
     protected function sendWhatsappNotifications($documents, array $perDocDeptIds): void
     {
         try {
-            $token   = trim($this->FONNTE_TOKEN);
-            $groupId = trim($this->FONNTE_GROUP_TARGET);
-            $appUrl  = rtrim(config('app.url') ?: url('/'), '/') . '/';
+            $token  = trim($this->FONNTE_TOKEN);
+            $appUrl = rtrim(config('app.url') ?: url('/'), '/') . '/';
 
             if ($token === '') {
                 Log::warning('Fonnte token missing');
                 return;
             }
 
-            // ambil semua dept unik
+            // ambil semua dept unik yang dipilih user
             $allDeptIds = [];
             foreach ($perDocDeptIds as $ids) $allDeptIds = array_merge($allDeptIds, $ids);
             $allDeptIds = array_values(array_unique($allDeptIds));
 
-            // ✅ ambil wa_send_type juga
+            if (empty($allDeptIds)) return;
+
+            // ✅ ambil wa_send_type + no_wa + fonnte_token
             $deptMap = Department::whereIn('id', $allDeptIds)
                 ->where('is_active', true)
-                ->get(['id','name','no_wa','wa_send_type'])
+                ->get(['id','name','no_wa','wa_send_type','fonnte_token'])
                 ->keyBy('id');
 
-            // deptId => docs[]
+            // deptId => docs[] sesuai form
             $docsByDept = [];
             foreach ($documents as $doc) {
                 $deptIds = $perDocDeptIds[(string)$doc->id] ?? [];
@@ -276,64 +261,45 @@ class DocumentDistributionController extends Controller
                 }
             }
 
-            /**
-             * 1) GROUP: gabungkan semua doc untuk dept wa_send_type=group
-             */
-            $groupDocsMap = [];        // docId => doc
-            $groupDeptNames = [];      // list dept name
-
+            // ✅ kirim per dept (personal atau group)
             foreach ($docsByDept as $deptId => $docList) {
                 $dept = $deptMap[$deptId] ?? null;
                 if (!$dept) continue;
 
                 $type = strtolower((string)($dept->wa_send_type ?? 'personal'));
-                if ($type !== 'group') continue;
 
-                $groupDeptNames[] = $dept->name;
+                if ($type === 'group') {
+                    // target group diambil dari field fonnte_token (id group @g.us)
+                    $rawTarget = trim((string)($dept->fonnte_token ?? ''));
+                    $target = $this->normalizeWaTarget($rawTarget);
 
-                foreach ($docList as $d) {
-                    $groupDocsMap[(string)$d->id] = $d; // unique docs
-                }
-            }
+                    if ($target === '' || !str_contains($target, '@g.us')) {
+                        Log::warning('Skip GROUP: fonnte_token(group id) empty/invalid', [
+                            'dept_id' => $deptId,
+                            'dept'    => $dept->name,
+                            'raw'     => $rawTarget,
+                        ]);
+                        continue;
+                    }
 
-            if (!empty($groupDocsMap)) {
-                if ($groupId === '') {
-                    Log::warning('Skip group send: group target empty');
-                } else {
-                    $msg = $this->buildGroupMessage(
-                        array_values($groupDocsMap),
-                        array_values(array_unique($groupDeptNames)),
-                        $appUrl
-                    );
+                    $msg = $this->buildGroupDeptMessage($dept->name, $docList, $appUrl);
 
-                    Log::info('Send GROUP by wa_send_type', [
-                        'group_target' => $groupId,
-                        'dept_names'   => $groupDeptNames,
-                        'docs_count'   => count($groupDocsMap),
+                    Log::info('Send GROUP (per dept)', [
+                        'dept'   => $dept->name,
+                        'target' => $target,
+                        'docs'   => count($docList),
                     ]);
 
-                    $this->sendFonnte($token, $groupId, $msg);
-                }
-            }
-
-            /**
-             * 2) PERSONAL: kirim per dept (wa_send_type=personal)
-             */
-            foreach ($docsByDept as $deptId => $docList) {
-                $dept = $deptMap[$deptId] ?? null;
-                if (!$dept) continue;
-
-                $type = strtolower((string)($dept->wa_send_type ?? 'personal'));
-                if ($type === 'group') {
-                    // sudah dibroadcast ke group, skip personal
+                    $this->sendFonnte($token, $target, $msg);
                     continue;
                 }
 
+                // PERSONAL
                 $raw = trim((string)($dept->no_wa ?? ''));
                 $target = $this->normalizeWaTarget($raw);
 
                 if ($target === '') {
-                    Log::warning('Skip personal: no_wa empty/invalid', [
+                    Log::warning('Skip PERSONAL: no_wa empty/invalid', [
                         'dept_id' => $deptId,
                         'dept'    => $dept->name,
                         'raw'     => $raw,
@@ -341,11 +307,12 @@ class DocumentDistributionController extends Controller
                     continue;
                 }
 
-                $msg = $this->buildDeptMessage($dept->name, $docList, $appUrl);
+                $msg = $this->buildPersonalMessage($dept->name, $docList, $appUrl);
 
-                Log::info('Send PERSONAL by wa_send_type', [
+                Log::info('Send PERSONAL (per dept)', [
                     'dept'   => $dept->name,
                     'target' => $target,
+                    'docs'   => count($docList),
                 ]);
 
                 $this->sendFonnte($token, $target, $msg);
@@ -357,13 +324,13 @@ class DocumentDistributionController extends Controller
     }
 
     /**
-     * ✅ Message untuk GROUP (broadcast)
+     * ✅ Pesan untuk GROUP (per dept group)
      */
-    protected function buildGroupMessage(array $docs, array $deptNames, string $appUrl): string
+    protected function buildGroupDeptMessage(string $deptName, array $docs, string $appUrl): string
     {
         $header =
             "*Pemberitahuan Distribusi Dokumen Resmi*\n\n".
-            "Yth. Group\n".
+            "Yth. Group *{$deptName}*\n".
             "Berikut dokumen yang didistribusikan:\n\n";
 
         $body = "";
@@ -377,23 +344,15 @@ class DocumentDistributionController extends Controller
             $i++;
         }
 
-        $deptList = "";
-        $j = 1;
-        foreach ($deptNames as $nm) {
-            $deptList .= "   {$j}. {$nm}\n";
-            $j++;
-        }
-
         return $header.$body.
-            "*Divisi Tujuan (Group):*\n{$deptList}\n".
             "Akses dokumen: {$appUrl}\n\n".
             "Terima kasih.\n";
     }
 
     /**
-     * ✅ Message untuk PERSONAL
+     * ✅ Pesan untuk PERSONAL (per dept personal)
      */
-    protected function buildDeptMessage(string $deptName, array $docs, string $appUrl): string
+    protected function buildPersonalMessage(string $deptName, array $docs, string $appUrl): string
     {
         $header =
             "*Pemberitahuan Distribusi Dokumen Resmi*\n\n".
