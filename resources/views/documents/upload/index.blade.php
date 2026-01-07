@@ -86,6 +86,14 @@
       </div>
     @endif
 
+    @if(session('error'))
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="mdi mdi-alert-circle-outline me-2"></i>
+        {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    @endif
+
     @if ($errors->any() && !old('_from'))
       <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <i class="mdi mdi-alert-circle-outline me-2"></i>
@@ -227,7 +235,6 @@
                               <th class="text-center">Di Ubah</th>
                             @endif
 
-                            {{-- ✅ KOLOM BARU --}}
                             @if($canturunanclinic)
                               <th class="text-center">Turunan Klinik</th>
                             @endif
@@ -332,7 +339,7 @@
                                 </td>
                               @endif
 
-                              {{-- ✅ Turunan Klinik --}}
+                              {{-- Turunan Klinik --}}
                               @if($canturunanclinic)
                                 <td class="text-center">
                                   <button type="button"
@@ -413,20 +420,443 @@
   </div>
 </div>
 
+
 {{-- ================== CREATE MODAL ================== --}}
 @if($canCreateNew)
-  {{-- ... MODAL CREATE kamu tetap (tidak saya ubah) ... --}}
+<div class="modal fade" id="createModal" tabindex="-1" aria-labelledby="createModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content shadow-lg rounded-3">
+      <form method="post" action="{{ route('documents.store') }}" enctype="multipart/form-data" id="formCreate">
+        @csrf
+        <input type="hidden" name="_from" value="create">
+
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-semibold" id="createModalLabel">Add Document</h5>
+          <button type="button" class="btn btn-icon btn-text-secondary" data-bs-dismiss="modal" aria-label="Close">
+            <i class="mdi mdi-close"></i>
+          </button>
+        </div>
+
+        <div class="modal-body pt-0">
+          @if ($errors->any() && old('_from')==='create')
+            <div class="alert alert-danger">
+              <i class="mdi mdi-alert-circle-outline me-1"></i> Gagal menyimpan. Periksa kembali:
+              <ul class="mb-0 mt-2 ps-3">
+                @foreach ($errors->all() as $err) <li>{{ $err }}</li> @endforeach
+              </ul>
+            </div>
+          @endif
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Document Type</label>
+              <select class="form-select select2 @error('document_type_id') is-invalid @enderror"
+                      name="document_type_id" id="create_document_type_id"
+                      data-placeholder="Pilih jenis dokumen" required>
+                <option value=""></option>
+                @foreach($documentTypes as $dt)
+                  <option value="{{ $dt->id }}" {{ (old('_from')==='create' && old('document_type_id')===$dt->id) ? 'selected' : '' }}>
+                    {{ $dt->kode }} - {{ $dt->nama }}
+                  </option>
+                @endforeach
+              </select>
+              @error('document_type_id') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Divisi</label>
+              <select class="form-select select2 @error('department_id') is-invalid @enderror"
+                      name="department_id" id="create_department_id"
+                      data-placeholder="Pilih divisi" required>
+                <option value=""></option>
+                @foreach($departments as $dep)
+                  <option value="{{ $dep->id }}" {{ (old('_from')==='create' && old('department_id')===$dep->id) ? 'selected' : '' }}>
+                    {{ $dep->code }} - {{ $dep->name }}
+                  </option>
+                @endforeach
+              </select>
+              @error('department_id') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12">
+              <label class="form-label required">Document Name</label>
+              <input type="text" class="form-control @error('document_name') is-invalid @enderror"
+                     name="document_name" id="create_name"
+                     value="{{ old('_from')==='create' ? old('document_name') : '' }}"
+                     placeholder="Masukkan nama dokumen" required>
+              @error('document_name') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Publish Date</label>
+              <input type="date" class="form-control @error('publish_date') is-invalid @enderror"
+                     name="publish_date" id="create_publish_date"
+                     value="{{ old('_from')==='create' ? old('publish_date') : '' }}" required>
+              @error('publish_date') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Upload Document (PDF)</label>
+              <input type="file" class="form-control @error('file') is-invalid @enderror"
+                     name="file" accept="application/pdf,.pdf" required>
+              @error('file') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+              <small class="text-muted">PDF only. Max 10MB.</small>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Catatan</label>
+              <textarea class="form-control @error('notes') is-invalid @enderror"
+                        name="notes" id="create_notes" rows="3"
+                        placeholder="Catatan (opsional)">{{ old('_from')==='create' ? old('notes') : '' }}</textarea>
+              @error('notes') @if(old('_from')==='create') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+         <!--    {{-- DISTRIBUTION --}}
+            <div class="col-12">
+              <label class="form-label">Distribusi</label>
+              <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="create_dist_default" value="" checked>
+                  <label class="form-check-label" for="create_dist_default">Default (Divisi asal)</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="create_dist_all" value="all">
+                  <label class="form-check-label" for="create_dist_all">Semua Divisi</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="create_dist_selected" value="selected">
+                  <label class="form-check-label" for="create_dist_selected">Pilih Divisi</label>
+                </div>
+              </div>
+
+              <div class="mt-2" id="create_distribution_wrap" style="display:none;">
+                <select class="form-select select2 @error('distribution_departments') is-invalid @enderror"
+                        name="distribution_departments[]" id="create_distribution_departments"
+                        data-placeholder="Pilih divisi distribusi" multiple>
+                  @foreach($departments as $dep)
+                    <option value="{{ $dep->id }}">{{ $dep->code }} - {{ $dep->name }}</option>
+                  @endforeach
+                </select>
+                @error('distribution_departments') @if(old('_from')==='create') <div class="invalid-feedback d-block">{{ $message }}</div> @endif @enderror
+              </div>
+              <small class="text-muted d-block mt-1">Jika pilih "Pilih Divisi" tapi tidak memilih apa pun, sistem fallback ke divisi asal.</small>
+            </div> -->
+
+            <div class="col-12">
+              <label class="form-label d-block">Status</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="create_is_active" name="is_active" value="1" checked>
+                <label class="form-check-label" for="create_is_active">Active</label>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 d-flex justify-content-end">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="mdi mdi-content-save-outline"></i> Simpan
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
 @endif
+
 
 {{-- ================== CHANGE MODAL ================== --}}
 @if($canChangeToNew)
-  {{-- ... MODAL CHANGE kamu tetap (tidak saya ubah) ... --}}
+<div class="modal fade" id="changeModal" tabindex="-1" aria-labelledby="changeModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content shadow-lg rounded-3">
+      <form method="post" action="{{ route('documents.store') }}" enctype="multipart/form-data" id="formChange">
+        @csrf
+        <input type="hidden" name="_from" value="change">
+        <input type="hidden" name="change_of" id="change_of" value="">
+
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-semibold" id="changeModalLabel">Ubah Dokumen (Buat Nomor Baru)</h5>
+          <button type="button" class="btn btn-icon btn-text-secondary" data-bs-dismiss="modal" aria-label="Close">
+            <i class="mdi mdi-close"></i>
+          </button>
+        </div>
+
+        <div class="modal-body pt-0">
+          @if ($errors->any() && old('_from')==='change')
+            <div class="alert alert-danger">
+              <i class="mdi mdi-alert-circle-outline me-1"></i> Gagal menyimpan. Periksa kembali:
+              <ul class="mb-0 mt-2 ps-3">
+                @foreach ($errors->all() as $err) <li>{{ $err }}</li> @endforeach
+              </ul>
+            </div>
+          @endif
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Document Type</label>
+              <select class="form-select select2 @error('document_type_id') is-invalid @enderror"
+                      name="document_type_id" id="change_document_type_id"
+                      data-placeholder="Pilih jenis dokumen" required>
+                <option value=""></option>
+                @foreach($documentTypes as $dt)
+                  <option value="{{ $dt->id }}" {{ (old('_from')==='change' && old('document_type_id')===$dt->id) ? 'selected' : '' }}>
+                    {{ $dt->kode }} - {{ $dt->nama }}
+                  </option>
+                @endforeach
+              </select>
+              @error('document_type_id') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Divisi</label>
+              <select class="form-select select2 @error('department_id') is-invalid @enderror"
+                      name="department_id" id="change_department_id"
+                      data-placeholder="Pilih divisi" required>
+                <option value=""></option>
+                @foreach($departments as $dep)
+                  <option value="{{ $dep->id }}" {{ (old('_from')==='change' && old('department_id')===$dep->id) ? 'selected' : '' }}>
+                    {{ $dep->code }} - {{ $dep->name }}
+                  </option>
+                @endforeach
+              </select>
+              @error('department_id') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12">
+              <label class="form-label required">Document Name</label>
+              <input type="text" class="form-control @error('document_name') is-invalid @enderror"
+                     name="document_name" id="change_name"
+                     value="{{ old('_from')==='change' ? old('document_name') : '' }}" required>
+              @error('document_name') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Publish Date</label>
+              <input type="date" class="form-control @error('publish_date') is-invalid @enderror"
+                     name="publish_date" id="change_publish_date"
+                     value="{{ old('_from')==='change' ? old('publish_date') : '' }}" required>
+              @error('publish_date') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Upload Document (PDF)</label>
+              <input type="file" class="form-control @error('file') is-invalid @enderror"
+                     name="file" accept="application/pdf,.pdf" required>
+              @error('file') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+              <small class="text-muted">PDF only. Max 10MB.</small>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Catatan</label>
+              <textarea class="form-control @error('notes') is-invalid @enderror"
+                        name="notes" id="change_notes" rows="3"
+                        placeholder="Catatan (opsional)">{{ old('_from')==='change' ? old('notes') : '' }}</textarea>
+              @error('notes') @if(old('_from')==='change') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            {{-- DISTRIBUTION (optional; akan di-override dari dokumen lama jika ada) --}}
+            <!-- <div class="col-12">
+              <label class="form-label">Distribusi (opsional)</label>
+              <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="change_dist_default" value="" checked>
+                  <label class="form-check-label" for="change_dist_default">Default</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="change_dist_all" value="all">
+                  <label class="form-check-label" for="change_dist_all">Semua Divisi</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="change_dist_selected" value="selected">
+                  <label class="form-check-label" for="change_dist_selected">Pilih Divisi</label>
+                </div>
+              </div>
+
+              <div class="mt-2" id="change_distribution_wrap" style="display:none;">
+                <select class="form-select select2"
+                        name="distribution_departments[]" id="change_distribution_departments"
+                        data-placeholder="Pilih divisi distribusi" multiple>
+                  @foreach($departments as $dep)
+                    <option value="{{ $dep->id }}">{{ $dep->code }} - {{ $dep->name }}</option>
+                  @endforeach
+                </select>
+              </div>
+
+              <small class="text-muted d-block mt-1">
+                Mode "Ubah" akan menyalin distribusi dari dokumen lama (jika ada), sehingga pilihan di sini biasanya di-override.
+              </small>
+            </div> -->
+
+            <div class="col-12">
+              <label class="form-label d-block">Status</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="change_is_active" name="is_active" value="1" checked>
+                <label class="form-check-label" for="change_is_active">Active</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 d-flex justify-content-end">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-warning">
+            <i class="mdi mdi-content-save-outline"></i> Simpan Dokumen Baru
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 @endif
+
 
 {{-- ================== EDIT MODAL ================== --}}
 @if($canUpdate)
-  {{-- ... MODAL EDIT kamu tetap (tidak saya ubah) ... --}}
+<div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content shadow-lg rounded-3">
+      <form method="post" action="#" enctype="multipart/form-data" id="formEdit">
+        @csrf
+        @method('PUT')
+        <input type="hidden" name="_from" value="edit">
+        <input type="hidden" id="edit_id" value="">
+
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-semibold" id="editModalLabel">Edit Document</h5>
+          <button type="button" class="btn btn-icon btn-text-secondary" data-bs-dismiss="modal" aria-label="Close">
+            <i class="mdi mdi-close"></i>
+          </button>
+        </div>
+
+        <div class="modal-body pt-0">
+          @if ($errors->any() && old('_from')==='edit')
+            <div class="alert alert-danger">
+              <i class="mdi mdi-alert-circle-outline me-1"></i> Gagal menyimpan. Periksa kembali:
+              <ul class="mb-0 mt-2 ps-3">
+                @foreach ($errors->all() as $err) <li>{{ $err }}</li> @endforeach
+              </ul>
+            </div>
+          @endif
+
+          <div class="row g-3">
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Document Type</label>
+              <select class="form-select select2 @error('document_type_id') is-invalid @enderror"
+                      name="document_type_id" id="edit_document_type_id"
+                      data-placeholder="Pilih jenis dokumen" required>
+                <option value=""></option>
+                @foreach($documentTypes as $dt)
+                  <option value="{{ $dt->id }}" {{ (old('_from')==='edit' && old('document_type_id')===$dt->id) ? 'selected' : '' }}>
+                    {{ $dt->kode }} - {{ $dt->nama }}
+                  </option>
+                @endforeach
+              </select>
+              @error('document_type_id') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Divisi</label>
+              <select class="form-select select2 @error('department_id') is-invalid @enderror"
+                      name="department_id" id="edit_department_id"
+                      data-placeholder="Pilih divisi" required>
+                <option value=""></option>
+                @foreach($departments as $dep)
+                  <option value="{{ $dep->id }}" {{ (old('_from')==='edit' && old('department_id')===$dep->id) ? 'selected' : '' }}>
+                    {{ $dep->code }} - {{ $dep->name }}
+                  </option>
+                @endforeach
+              </select>
+              @error('department_id') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12">
+              <label class="form-label required">Document Name</label>
+              <input type="text" class="form-control @error('document_name') is-invalid @enderror"
+                     name="document_name" id="edit_name"
+                     value="{{ old('_from')==='edit' ? old('document_name') : '' }}" required>
+              @error('document_name') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label required">Publish Date</label>
+              <input type="date" class="form-control @error('publish_date') is-invalid @enderror"
+                     name="publish_date" id="edit_publish_date"
+                     value="{{ old('_from')==='edit' ? old('publish_date') : '' }}" required>
+              @error('publish_date') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            <div class="col-12 col-md-6">
+              <label class="form-label">Replace File (PDF) <span class="text-muted small">(optional)</span></label>
+              <input type="file" class="form-control @error('file') is-invalid @enderror"
+                     name="file" accept="application/pdf,.pdf">
+              @error('file') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+              <small class="text-muted">Jika upload file baru, notifikasi akan di-reset (read_notifikasi = 0).</small>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label">Catatan</label>
+              <textarea class="form-control @error('notes') is-invalid @enderror"
+                        name="notes" id="edit_notes" rows="3"
+                        placeholder="Catatan (opsional)">{{ old('_from')==='edit' ? old('notes') : '' }}</textarea>
+              @error('notes') @if(old('_from')==='edit') <div class="invalid-feedback">{{ $message }}</div> @endif @enderror
+            </div>
+
+            {{-- DISTRIBUTION --}}
+           <!--  <div class="col-12">
+              <label class="form-label">Distribusi</label>
+              <div class="d-flex flex-wrap gap-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="edit_dist_keep" value="" checked>
+                  <label class="form-check-label" for="edit_dist_keep">Keep / Default (tidak ubah)</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="edit_dist_all" value="all">
+                  <label class="form-check-label" for="edit_dist_all">Semua Divisi</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="distribute_mode" id="edit_dist_selected" value="selected">
+                  <label class="form-check-label" for="edit_dist_selected">Pilih Divisi</label>
+                </div>
+              </div>
+
+              <div class="mt-2" id="edit_distribution_wrap" style="display:none;">
+                <select class="form-select select2"
+                        name="distribution_departments[]" id="edit_distribution_departments"
+                        data-placeholder="Pilih divisi distribusi" multiple>
+                  @foreach($departments as $dep)
+                    <option value="{{ $dep->id }}">{{ $dep->code }} - {{ $dep->name }}</option>
+                  @endforeach
+                </select>
+              </div>
+              <small class="text-muted d-block mt-1">Untuk mode "Pilih Divisi", jika tidak memilih apa pun maka fallback ke divisi dokumen.</small>
+            </div> -->
+
+            <div class="col-12">
+              <label class="form-label d-block">Status</label>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="edit_is_active" name="is_active" value="1">
+                <label class="form-check-label" for="edit_is_active">Active</label>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="modal-footer border-0 d-flex justify-content-end">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="mdi mdi-content-save-outline"></i> Update
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 @endif
+
 
 {{-- ✅ ================== DERIVE CLINIC MODAL ================== --}}
 @if($canturunanclinic)
@@ -526,13 +956,17 @@
 </div>
 @endif
 
+
 {{-- FORM DELETE --}}
 @if($canDelete)
 <form id="formDeleteDocument" method="POST" class="d-none">
-  @csrf @method('DELETE')
+  @csrf
+  @method('DELETE')
 </form>
 @endif
+
 @endsection
+
 
 @section('vendor-script')
   <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
@@ -559,13 +993,27 @@
       });
     }
 
+    function toggleDistribution(prefix) {
+      const val = $(`input[name="distribute_mode"][id^="${prefix}_dist_"]:checked`).val();
+      const wrap = document.getElementById(`${prefix}_distribution_wrap`);
+      if (!wrap) return;
+      wrap.style.display = (val === 'selected') ? '' : 'none';
+    }
+
     $(document).ready(function () {
       initSelect2();
 
-      $('#createModal').on('shown.bs.modal', function () { initSelect2(this); });
-      $('#editModal').on('shown.bs.modal', function () { initSelect2(this); });
-      $('#changeModal').on('shown.bs.modal', function () { initSelect2(this); });
+      $('#createModal').on('shown.bs.modal', function () { initSelect2(this); toggleDistribution('create'); });
+      $('#editModal').on('shown.bs.modal', function () { initSelect2(this); toggleDistribution('edit'); });
+      $('#changeModal').on('shown.bs.modal', function () { initSelect2(this); toggleDistribution('change'); });
       $('#deriveClinicModal').on('shown.bs.modal', function () { initSelect2(this); });
+
+      // Toggle distribution wrap
+      $(document).on('change', 'input[name="distribute_mode"]', function () {
+        if (this.id.startsWith('create_')) toggleDistribution('create');
+        if (this.id.startsWith('change_')) toggleDistribution('change');
+        if (this.id.startsWith('edit_')) toggleDistribution('edit');
+      });
 
       // Auto-open CREATE
       @if ($errors->any() && old('_from')==='create')
@@ -573,7 +1021,7 @@
         if (cm) {
           const bsModal = new bootstrap.Modal(cm);
           bsModal.show();
-          setTimeout(() => { initSelect2(cm); }, 150);
+          setTimeout(() => { initSelect2(cm); toggleDistribution('create'); }, 150);
         }
       @endif
 
@@ -583,7 +1031,7 @@
         if (chm) {
           const bsModal = new bootstrap.Modal(chm);
           bsModal.show();
-          setTimeout(() => { initSelect2(chm); }, 150);
+          setTimeout(() => { initSelect2(chm); toggleDistribution('change'); }, 150);
         }
       @endif
 
@@ -593,7 +1041,7 @@
         if (em) {
           const bsModal = new bootstrap.Modal(em);
           bsModal.show();
-          setTimeout(() => { initSelect2(em); }, 150);
+          setTimeout(() => { initSelect2(em); toggleDistribution('edit'); }, 150);
         }
       @endif
 
@@ -633,10 +1081,15 @@
         const chk = document.getElementById('edit_is_active');
         if (chk) chk.checked = (isActive === 1 || isActive === '1');
 
+        // reset distribution UI each open
+        $('#edit_dist_keep').prop('checked', true).trigger('change');
+        $('#edit_distribution_departments').val([]).trigger('change');
+        toggleDistribution('edit');
+
         const modal = document.getElementById('editModal');
         const bsModal = new bootstrap.Modal(modal);
         bsModal.show();
-        setTimeout(() => { initSelect2(modal); }, 100);
+        setTimeout(() => { initSelect2(modal); toggleDistribution('edit'); }, 100);
       });
 
       // CHANGE handler
@@ -655,13 +1108,18 @@
         const chk = document.getElementById('change_is_active');
         if (chk) chk.checked = true;
 
+        // reset distribution UI each open
+        $('#change_dist_default').prop('checked', true).trigger('change');
+        $('#change_distribution_departments').val([]).trigger('change');
+        toggleDistribution('change');
+
         const modal = document.getElementById('changeModal');
         const bsModal = new bootstrap.Modal(modal);
         bsModal.show();
-        setTimeout(() => { initSelect2(modal); }, 100);
+        setTimeout(() => { initSelect2(modal); toggleDistribution('change'); }, 100);
       });
 
-      // ✅ DERIVE CLINIC handler
+      // DERIVE CLINIC handler
       $(document).on('click', '.btn-derive-clinic', function(e) {
         e.preventDefault();
         const btn = $(this);
@@ -686,6 +1144,9 @@
         form.reset();
         $('#create_document_type_id').val('').trigger('change');
         $('#create_department_id').val('').trigger('change');
+        $('#create_distribution_departments').val([]).trigger('change');
+        $('#create_dist_default').prop('checked', true).trigger('change');
+        toggleDistribution('create');
       });
 
       // Delete
