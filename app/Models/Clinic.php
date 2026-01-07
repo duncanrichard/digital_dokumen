@@ -37,4 +37,21 @@ class Clinic extends Model
             }
         });
     }
+
+    /**
+     * ✅ Semua dokumen yang punya clinic_id = clinic ini
+     * (biasanya turunan klinik)
+     */
+    public function documents()
+    {
+        return $this->hasMany(Document::class, 'clinic_id', 'id');
+    }
+
+    /**
+     * ✅ Alias lebih jelas untuk turunan klinik
+     */
+    public function derivedDocuments()
+    {
+        return $this->documents();
+    }
 }

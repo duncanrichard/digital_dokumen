@@ -21,6 +21,7 @@ class Document extends Model
     protected $fillable = [
         'jenis_dokumen_id',
         'department_id',
+        'clinic_id',          // ✅ tambahkan (turunan klinik)
         'sequence',
         'document_number',
         'name',
@@ -39,6 +40,7 @@ class Document extends Model
         'revision'        => 'integer',
         'sequence'        => 'integer',
         'notes'           => 'string',
+        'clinic_id'       => 'string', // ✅ opsional, tapi aman
     ];
 
     /* =======================
@@ -53,6 +55,15 @@ class Document extends Model
     public function department()
     {
         return $this->belongsTo(Department::class, 'department_id');
+    }
+
+    /**
+     * ✅ Dokumen turunan klinik akan punya clinic_id.
+     * Dokumen master (bukan turunan) biasanya null.
+     */
+    public function clinic()
+    {
+        return $this->belongsTo(Clinic::class, 'clinic_id');
     }
 
     public function distributedDepartments()
@@ -166,8 +177,7 @@ class Document extends Model
     }
 
     /**
-     * Alias kompatibel dengan kode kamu sebelumnya:
-     * changedToDocuments() dan changedFromDocuments()
+     * Alias kompatibel:
      */
     public function changedToDocuments()
     {
@@ -180,7 +190,7 @@ class Document extends Model
     }
 
     /* =======================
-     |  FILTERED RELATIONS (PENTING)
+     |  FILTERED RELATIONS
      ======================= */
 
     /**
@@ -201,7 +211,6 @@ class Document extends Model
 
     /**
      * Dokumen ini hasil perubahan dari dokumen lain (parent) (relation_type = changed_to)
-     * biasanya cuma 1 parent.
      */
     public function changedFromDocumentOnly()
     {
@@ -217,30 +226,27 @@ class Document extends Model
     }
 
     /* =======================
-     |  SINGLE HELPERS (BIAR ENAK DI BLADE)
+     |  SINGLE HELPERS
      ======================= */
 
-    /**
-     * Ambil 1 dokumen parent (diubah dari) kalau ada
-     */
     public function getChangedFromAttribute(): ?self
     {
-        return $this->changedFromDocumentOnly()->orderByDesc('documents.created_at')->first();
+        return $this->changedFromDocumentOnly()
+            ->orderByDesc('documents.created_at')
+            ->first();
     }
 
-    /**
-     * Ambil 1 dokumen child terakhir (hasil diubah) kalau ada
-     */
     public function getChangedToLatestAttribute(): ?self
     {
-        return $this->changedToDocumentsOnly()->orderByDesc('documents.created_at')->first();
+        return $this->changedToDocumentsOnly()
+            ->orderByDesc('documents.created_at')
+            ->first();
     }
 
-    /**
-     * Ambil semua turunan klinik (children)
-     */
     public function getClinicDerivativesAttribute()
     {
-        return $this->derivedClinicDocuments()->orderByDesc('documents.created_at')->get();
+        return $this->derivedClinicDocuments()
+            ->orderByDesc('documents.created_at')
+            ->get();
     }
 }
