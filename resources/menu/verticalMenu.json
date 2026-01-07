@@ -15,6 +15,29 @@
     },
     {
       "url": "javascript:void(0);",
+      "name": "Master Data",
+      "icon": "menu-icon tf-icons mdi mdi-database-outline",
+      "slug": "master-data",
+      "submenu": [
+        {
+          "url": "/master/jenis-dokumen",
+          "name": "Document Types",
+          "slug": "master-jenis-dokumen"
+        },
+        {
+          "url": "/master/departments",
+          "name": "Divisi",
+          "slug": "master-departments"
+        },
+        {
+          "url": "/master/clinics",
+          "name": "Klinik",
+          "slug": "master-clinics"
+        }
+      ]
+    },
+    {
+      "url": "javascript:void(0);",
       "name": "Document Control",
       "icon": "menu-icon tf-icons mdi mdi-file-document-outline",
       "slug": "document-control",
@@ -38,29 +61,6 @@
           "url": "/documents/access-approvals",
           "name": "Access Approvals",
           "slug": "document-control-approvals"
-        }
-      ]
-    },
-    {
-      "url": "javascript:void(0);",
-      "name": "Master Data",
-      "icon": "menu-icon tf-icons mdi mdi-database-outline",
-      "slug": "master-data",
-      "submenu": [
-        {
-          "url": "/master/jenis-dokumen",
-          "name": "Document Types",
-          "slug": "master-jenis-dokumen"
-        },
-        {
-          "url": "/master/departments",
-          "name": "Divisi",
-          "slug": "master-departments"
-        },
-        {
-          "url": "/master/clinics",
-          "name": "Klinik",
-          "slug": "master-clinics"
         }
       ]
     },
