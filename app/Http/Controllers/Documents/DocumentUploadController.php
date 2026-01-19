@@ -82,9 +82,40 @@ class DocumentUploadController extends Controller
         });
     }
 
-    protected function formatSequence(int $seq, int $pad = 2): string
+    /**
+     * ✅ Format nomer_dokumen: 001/002/025/026...
+     */
+    protected function formatNomerDokumen(int $seq, int $pad = 3): string
     {
         return str_pad((string) $seq, $pad, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * ✅ Ambil next nomor dokumen berdasarkan:
+     * jenis_dokumen_id + department_id + tahun
+     *
+     * - Sumber utama: MAX(nomer_dokumen::int)
+     * - Fallback: MAX(sequence)
+     * - Untuk create/change kita hanya hitung dokumen NON clinic (clinic_id IS NULL) agar turunan klinik tidak mengganggu urutan.
+     */
+    protected function nextNomerDokumenFor(string $jenisId, string $deptId, string $year): int
+    {
+        $base = Document::where('jenis_dokumen_id', $jenisId)
+            ->where('department_id', $deptId)
+            ->whereNull('clinic_id')                 // ✅ hanya base doc
+            ->where('document_number', 'like', "%/{$year}%"); // aman jika ada suffix
+
+        // 1) ambil dari nomer_dokumen
+        $maxFromNomer = (int) (clone $base)
+            ->selectRaw("MAX(NULLIF(nomer_dokumen,'')::int) as mx")
+            ->value('mx');
+
+        // 2) fallback dari sequence (kalau ada data lama belum kebackfill)
+        $maxFromSeq = (int) (clone $base)->max('sequence');
+
+        $max = max($maxFromNomer, $maxFromSeq);
+
+        return $max > 0 ? ($max + 1) : 1;
     }
 
     // ================== LIST / FILTER ==================
@@ -114,7 +145,7 @@ class DocumentUploadController extends Controller
         $items = Document::with([
                 'jenisDokumen:id,kode,nama',
                 'department:id,code,name',
-                'clinic:id,code,name', // ✅ load clinic agar bisa dipakai jika mau tampilkan
+                'clinic:id,code,name',
                 'distributedDepartments:id',
                 'changedToDocuments:id,document_number,revision',
                 'changedFromDocuments:id,document_number,revision',
@@ -179,12 +210,10 @@ class DocumentUploadController extends Controller
             'is_active'     => ['nullable', 'in:1'],
             'notes'         => ['nullable', 'string'],
 
-            // distribusi (opsional)
             'distribute_mode'            => ['nullable', 'in:all,selected'],
-            'distribution_departments'   => ['nullable', 'array'], // ✅ nullable supaya tidak error
+            'distribution_departments'   => ['nullable', 'array'],
             'distribution_departments.*' => ['uuid', 'exists:departments,id'],
 
-            // mode link
             'revise_of' => ['nullable', 'uuid', 'exists:documents,id'],
             'change_of' => ['nullable', 'uuid', 'exists:documents,id'],
             'derive_of' => ['nullable', 'uuid', 'exists:documents,id'],
@@ -195,13 +224,11 @@ class DocumentUploadController extends Controller
             $rules['derive_of'] = ['required', 'uuid', 'exists:documents,id'];
             $rules['clinic_id'] = ['required', 'uuid', 'exists:clinics,id'];
 
-            // mengikuti base doc
             $rules['document_type_id'] = ['nullable'];
             $rules['department_id']    = ['nullable'];
         } elseif ($request->filled('revise_of')) {
             $rules['revise_of'] = ['required', 'uuid', 'exists:documents,id'];
 
-            // mengikuti base doc
             $rules['document_type_id'] = ['nullable'];
             $rules['department_id']    = ['nullable'];
         } else {
@@ -230,9 +257,10 @@ class DocumentUploadController extends Controller
                 $doc = Document::create([
                     'jenis_dokumen_id' => $base->jenis_dokumen_id,
                     'department_id'    => $base->department_id,
-                    'clinic_id'        => $base->clinic_id, // ✅ kalau base ternyata turunan, ikut saja
+                    'clinic_id'        => $base->clinic_id,
                     'sequence'         => $base->sequence,
-                    'document_number'  => $base->document_number,
+                    'nomer_dokumen'    => $base->nomer_dokumen,     // ✅ ikut base
+                    'document_number'  => $base->document_number,   // ✅ sama
                     'revision'         => $nextRevision,
                     'name'             => $validated['document_name'],
                     'publish_date'     => $validated['publish_date'],
@@ -251,7 +279,7 @@ class DocumentUploadController extends Controller
         }
 
         // =========================================================
-        // MODE: DERIVE CLINIC (Turunan Klinik) → simpan clinic_id ✅
+        // MODE: DERIVE CLINIC
         // =========================================================
         if ($from === 'derive_clinic') {
             try {
@@ -272,8 +300,9 @@ class DocumentUploadController extends Controller
                     $doc = Document::create([
                         'jenis_dokumen_id' => $base->jenis_dokumen_id,
                         'department_id'    => $base->department_id,
-                        'clinic_id'        => $clinic->id,        // ✅ INI KUNCI (simpan id clinic)
+                        'clinic_id'        => $clinic->id,
                         'sequence'         => $base->sequence,
+                        'nomer_dokumen'    => $base->nomer_dokumen,   // ✅ ikut base (025)
                         'document_number'  => $derivedNumber,
                         'revision'         => 0,
                         'name'             => $validated['document_name'],
@@ -295,7 +324,6 @@ class DocumentUploadController extends Controller
                 return redirect()->route('documents.index')
                     ->with('success', "Turunan klinik berhasil dibuat. Number: {$derivedNumber} R0");
             } catch (\Throwable $e) {
-                // kalau gagal, hapus file yg sudah terupload
                 if ($storedPath && Storage::disk('public')->exists($storedPath)) {
                     Storage::disk('public')->delete($storedPath);
                 }
@@ -306,27 +334,24 @@ class DocumentUploadController extends Controller
         }
 
         // =========================================================
-        // MODE: CREATE / CHANGE
+        // MODE: CREATE / CHANGE  ✅ pakai nomer_dokumen
         // =========================================================
         $jenis = JenisDokumen::select('id', 'kode')->findOrFail($validated['document_type_id']);
         $dept  = Department::select('id', 'code')->findOrFail($validated['department_id']);
         $year  = Carbon::parse($validated['publish_date'])->format('Y');
 
-        $nextSequence = (int) Document::where('jenis_dokumen_id', $jenis->id)
-            ->where('department_id', $dept->id)
-            ->max('sequence');
+        $nextSeqInt     = $this->nextNomerDokumenFor($jenis->id, $dept->id, $year);
+        $nomerDokumen   = $this->formatNomerDokumen($nextSeqInt); // 001/002/025/026
+        $documentNumber = "{$jenis->kode}-{$dept->code}/{$nomerDokumen}/{$year}";
 
-        $nextSequence = $nextSequence ? $nextSequence + 1 : 1;
-        $seqFormatted = $this->formatSequence($nextSequence, 2);
-
-        $documentNumber = "{$jenis->kode}-{$dept->code}/{$seqFormatted}/{$year}";
-        $changeOfId     = $validated['change_of'] ?? null;
+        $changeOfId = $validated['change_of'] ?? null;
 
         DB::transaction(function () use (
             $validated,
             $jenis,
             $dept,
-            $nextSequence,
+            $nextSeqInt,
+            $nomerDokumen,
             $documentNumber,
             $storedPath,
             $isActive,
@@ -335,9 +360,10 @@ class DocumentUploadController extends Controller
             $doc = Document::create([
                 'jenis_dokumen_id' => $jenis->id,
                 'department_id'    => $dept->id,
-                'clinic_id'        => null, // ✅ create/change bukan turunan klinik
-                'sequence'         => $nextSequence,
-                'document_number'  => $documentNumber,
+                'clinic_id'        => null,
+                'sequence'         => $nextSeqInt,      // tetap simpan angka
+                'nomer_dokumen'    => $nomerDokumen,    // ✅ sumber /025/
+                'document_number'  => $documentNumber,  // ✅ full PKWTT-DM/025/2026
                 'revision'         => 0,
                 'name'             => $validated['document_name'],
                 'publish_date'     => $validated['publish_date'],
@@ -420,7 +446,7 @@ class DocumentUploadController extends Controller
             'is_active'                  => ['nullable','in:1'],
 
             'distribute_mode'            => ['nullable','in:all,selected'],
-            'distribution_departments'   => ['nullable','array'], // ✅ nullable
+            'distribution_departments'   => ['nullable','array'],
             'distribution_departments.*' => ['uuid','exists:departments,id'],
 
             'notes'                      => ['nullable','string'],
@@ -452,19 +478,16 @@ class DocumentUploadController extends Controller
                 $payload['read_notifikasi'] = 0;
             }
 
+            // ✅ Jika jenis/divisi berubah => generate nomor baru pakai nomer_dokumen
             if ($renumber) {
                 $year = Carbon::parse($validated['publish_date'])->format('Y');
 
-                $nextSequence = (int) Document::where('jenis_dokumen_id', $jenis->id)
-                    ->where('department_id', $dept->id)
-                    ->max('sequence');
+                $nextSeqInt   = $this->nextNomerDokumenFor($jenis->id, $dept->id, $year);
+                $nomerDokumen = $this->formatNomerDokumen($nextSeqInt);
 
-                $nextSequence = $nextSequence ? $nextSequence + 1 : 1;
-
-                $seqFormatted = $this->formatSequence($nextSequence, 2);
-
-                $payload['sequence']        = $nextSequence;
-                $payload['document_number'] = "{$jenis->kode}-{$dept->code}/{$seqFormatted}/{$year}";
+                $payload['sequence']        = $nextSeqInt;
+                $payload['nomer_dokumen']   = $nomerDokumen;
+                $payload['document_number'] = "{$jenis->kode}-{$dept->code}/{$nomerDokumen}/{$year}";
                 $payload['revision']        = 0;
             }
 

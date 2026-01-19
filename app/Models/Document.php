@@ -21,9 +21,13 @@ class Document extends Model
     protected $fillable = [
         'jenis_dokumen_id',
         'department_id',
-        'clinic_id',          // ✅ tambahkan (turunan klinik)
-        'sequence',
-        'document_number',
+        'clinic_id',
+
+        // nomor urut & nomor tampil
+        'sequence',         // int (optional, tetap dipakai)
+        'nomer_dokumen',    // string: 001/002/025
+        'document_number',  // string: PKWTT-DM/025/2026
+
         'name',
         'publish_date',
         'file_path',
@@ -40,11 +44,14 @@ class Document extends Model
         'revision'        => 'integer',
         'sequence'        => 'integer',
         'notes'           => 'string',
-        'clinic_id'       => 'string', // ✅ opsional, tapi aman
+        'clinic_id'       => 'string',
+
+        'nomer_dokumen'   => 'string',
+        'document_number' => 'string',
     ];
 
     /* =======================
-     |  RELATIONS (MASTER)
+     |  RELATIONS
      ======================= */
 
     public function jenisDokumen()
@@ -58,8 +65,8 @@ class Document extends Model
     }
 
     /**
-     * ✅ Dokumen turunan klinik akan punya clinic_id.
-     * Dokumen master (bukan turunan) biasanya null.
+     * Dokumen turunan klinik akan punya clinic_id.
+     * Dokumen master biasanya null.
      */
     public function clinic()
     {
@@ -90,14 +97,15 @@ class Document extends Model
         $term = trim((string) $term);
         if ($term === '') return $q;
 
-        // escape LIKE wildcard agar aman
+        // escape wildcard
         $escaped = addcslashes($term, "\\%_");
         $driver  = $q->getModel()->getConnection()->getDriverName();
         $like    = $driver === 'pgsql' ? 'ILIKE' : 'LIKE';
 
         return $q->where(function ($w) use ($escaped, $like) {
             $w->where('name', $like, "%{$escaped}%")
-              ->orWhere('document_number', $like, "%{$escaped}%");
+              ->orWhere('document_number', $like, "%{$escaped}%")
+              ->orWhere('nomer_dokumen', $like, "%{$escaped}%");
         });
     }
 
@@ -138,10 +146,21 @@ class Document extends Model
         return basename($this->file_path);
     }
 
+    /**
+     * Tampilan nomor + revisi
+     */
     public function getDisplayNumberAttribute(): string
     {
         $rev = (int) ($this->revision ?? 0);
         return "{$this->document_number} R{$rev}";
+    }
+
+    /**
+     * (Optional) numeric version dari nomer_dokumen untuk sorting/debug
+     */
+    public function getNomerDokumenIntAttribute(): int
+    {
+        return (int) preg_replace('/\D+/', '', (string) $this->nomer_dokumen);
     }
 
     /* =======================
@@ -150,9 +169,6 @@ class Document extends Model
      |  parent_document_id, child_document_id, relation_type
      ======================= */
 
-    /**
-     * Dokumen ini -> punya CHILD (dokumen hasil perubahan / turunan)
-     */
     public function relationsToChildren()
     {
         return $this->belongsToMany(
@@ -163,9 +179,6 @@ class Document extends Model
         )->withPivot('relation_type')->withTimestamps();
     }
 
-    /**
-     * Dokumen ini -> punya PARENT (dokumen asal)
-     */
     public function relationsToParents()
     {
         return $this->belongsToMany(
@@ -176,9 +189,7 @@ class Document extends Model
         )->withPivot('relation_type')->withTimestamps();
     }
 
-    /**
-     * Alias kompatibel:
-     */
+    // Alias kompatibel
     public function changedToDocuments()
     {
         return $this->relationsToChildren();
@@ -193,33 +204,21 @@ class Document extends Model
      |  FILTERED RELATIONS
      ======================= */
 
-    /**
-     * Dokumen ini DIUBAH menjadi dokumen lain (relation_type = changed_to)
-     */
     public function changedToDocumentsOnly()
     {
         return $this->relationsToChildren()->wherePivot('relation_type', 'changed_to');
     }
 
-    /**
-     * Dokumen ini TURUNAN klinik (relation_type = derived_clinic)
-     */
     public function derivedClinicDocuments()
     {
         return $this->relationsToChildren()->wherePivot('relation_type', 'derived_clinic');
     }
 
-    /**
-     * Dokumen ini hasil perubahan dari dokumen lain (parent) (relation_type = changed_to)
-     */
     public function changedFromDocumentOnly()
     {
         return $this->relationsToParents()->wherePivot('relation_type', 'changed_to');
     }
 
-    /**
-     * Dokumen ini turunan dari dokumen master (parent) (relation_type = derived_clinic)
-     */
     public function derivedFromMasterDocument()
     {
         return $this->relationsToParents()->wherePivot('relation_type', 'derived_clinic');
