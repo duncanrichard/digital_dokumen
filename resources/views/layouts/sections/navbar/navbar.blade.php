@@ -3,6 +3,10 @@
   $navbarDetached = ($navbarDetached ?? '');
   $notifCount     = $notifCount ?? 0;
   $notifItems     = $notifItems ?? collect();
+
+  $user = auth()->user();
+  $displayName = $user ? ($user->username ?? $user->name ?? 'User') : 'Guest';
+  $displayRole = $user ? (optional($user->role)->name ?? 'User') : '';
 @endphp
 
 <!-- Navbar -->
@@ -84,7 +88,6 @@
           {{-- Items --}}
           @forelse($notifItems as $n)
             <li>
-              {{-- BUKA PDF DI TAB BARU --}}
               <a class="dropdown-item py-3 d-flex gap-3"
                  href="{{ route('documents.open', $n->id) }}"
                  target="_blank" rel="noopener">
@@ -124,28 +127,36 @@
       <li class="nav-item navbar-dropdown dropdown-user dropdown">
         <a class="nav-link dropdown-toggle hide-arrow p-0" href="javascript:void(0);" data-bs-toggle="dropdown">
           <div class="avatar avatar-online">
-            <img src="{{ asset('assets/img/avatars/1.png') }}" alt class="w-px-40 h-auto rounded-circle">
+            <img src="{{ asset('assets/img/avatars/1.png') }}" alt="avatar" class="w-px-40 h-auto rounded-circle">
           </div>
         </a>
+
         <ul class="dropdown-menu dropdown-menu-end mt-3 py-2">
           <li>
             <a class="dropdown-item pb-2 mb-1" href="javascript:void(0);">
               <div class="d-flex align-items-center">
                 <div class="flex-shrink-0 me-2 pe-1">
                   <div class="avatar avatar-online">
-                    <img src="{{ asset('assets/img/avatars/1.png') }}" alt class="w-px-40 h-auto rounded-circle">
+                    <img src="{{ asset('assets/img/avatars/1.png') }}" alt="avatar" class="w-px-40 h-auto rounded-circle">
                   </div>
                 </div>
+
                 <div class="flex-grow-1">
-                  <h6 class="mb-0">John Doe</h6>
-                  <small class="text-muted">Admin</small>
+                  {{-- ✅ Nama sesuai user login --}}
+                  <h6 class="mb-0">{{ $displayName }}</h6>
+
+                  {{-- ✅ Role sesuai user login --}}
+                  @if($displayRole !== '')
+                    <small class="text-muted">{{ $displayRole }}</small>
+                  @endif
                 </div>
               </div>
             </a>
           </li>
+
           <li><div class="dropdown-divider my-1"></div></li>
 
-          {{-- Keep: Profile --}}
+          {{-- Profile --}}
           <li>
             <a class="dropdown-item" href="javascript:void(0);">
               <i class="mdi mdi-account-outline me-1 mdi-20px"></i>
@@ -155,21 +166,22 @@
 
           <li><div class="dropdown-divider my-1"></div></li>
 
+          {{-- Logout --}}
           <li>
-  <a class="dropdown-item" href="{{ route('logout') }}"
-     onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
-    <i class="mdi mdi-power me-1 mdi-20px"></i>
-    <span class="align-middle">Log Out</span>
-  </a>
+            <a class="dropdown-item" href="{{ route('logout') }}"
+              onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+              <i class="mdi mdi-power me-1 mdi-20px"></i>
+              <span class="align-middle">Log Out</span>
+            </a>
 
-  <form id="logout-form" action="{{ route('logout') }}" method="POST" class="d-none">
-    @csrf
-  </form>
-</li>
-
+            <form id="logout-form" action="{{ route('logout') }}" method="POST" class="d-none">
+              @csrf
+            </form>
+          </li>
         </ul>
       </li>
       {{-- /User --}}
+
     </ul>
   </div>
 
