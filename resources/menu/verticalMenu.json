@@ -1,17 +1,10 @@
 {
   "menu": [
-    {
+   {
       "url": "/",
       "name": "Dashboard",
       "icon": "menu-icon tf-icons mdi mdi-home-outline",
-      "slug": "dashboard",
-      "submenu": [
-        {
-          "url": "/",
-          "name": "Analytics",
-          "slug": "dashboard-analytics"
-        }
-      ]
+      "slug": "dashboard"
     },
     {
       "url": "javascript:void(0);",
