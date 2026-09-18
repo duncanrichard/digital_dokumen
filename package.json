@@ -91,8 +91,10 @@
     "bootstrap": "5.3.2",
     "highlight.js": "11.8.0",
     "jquery": "3.7.0",
+    "laravel-echo": "^1.19.0",
     "masonry-layout": "4.2.2",
     "node-waves": "0.7.6",
-    "perfect-scrollbar": "1.5.5"
+    "perfect-scrollbar": "1.5.5",
+    "pusher-js": "^8.6.0"
   }
 }

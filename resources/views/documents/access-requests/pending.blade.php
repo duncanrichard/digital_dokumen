@@ -42,14 +42,15 @@
 
           <dt class="col-sm-3">Requested At</dt>
           <dd class="col-sm-9">
-            {{ optional($accessRequest->requested_at)->format('d M Y H:i') }}
+            {{ \Carbon\Carbon::parse($accessRequest->requested_at ?? $accessRequest->created_at)->format('d M Y H:i') }}
           </dd>
         </dl>
 
         <div class="d-flex justify-content-between align-items-center">
-          <a href="{{ route('documents.index') }}" class="btn btn-outline-secondary">
-            <i class="mdi mdi-arrow-left"></i> Back to Document Library
-          </a>
+<a href="{{ route('documents.gallery.index') }}" class="btn btn-outline-secondary">
+  <i class="mdi mdi-arrow-left"></i> Back to Document Gallery
+</a>
+
 
           @if($accessRequest->status === 'pending')
             <span class="text-muted small">

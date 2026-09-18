@@ -16,8 +16,13 @@
 
   <div class="menu-inner-shadow"></div>
 
+  @php
+    $visibleMenus = app(\App\Services\MenuAccessService::class)
+      ->filter($menuData[0]->menu, auth()->user());
+  @endphp
+
   <ul class="menu-inner py-1">
-    @foreach ($menuData[0]->menu as $menu)
+    @foreach ($visibleMenus as $menu)
 
     {{-- adding active and open class if child is active --}}
 

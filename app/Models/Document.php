@@ -88,6 +88,26 @@ class Document extends Model
         return $this->hasMany(DocumentDistribution::class, 'document_id', 'id');
     }
 
+    public function distributedUsers()
+    {
+        return $this->belongsToMany(
+            User::class,
+            'document_user_distributions',
+            'document_id',
+            'user_id'
+        )->withTimestamps();
+    }
+
+    public function notificationReaders()
+    {
+        return $this->belongsToMany(
+            User::class,
+            'document_notification_reads',
+            'document_id',
+            'user_id'
+        )->withPivot('read_at');
+    }
+
     /* =======================
      |  SCOPES
      ======================= */

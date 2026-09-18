@@ -4,28 +4,28 @@
       "url": "/",
       "name": "Dashboard",
       "icon": "menu-icon tf-icons mdi mdi-home-outline",
-      "slug": "dashboard"
+      "slug": "dashboard-analytics"
     },
     {
       "url": "javascript:void(0);",
       "name": "Master Data",
       "icon": "menu-icon tf-icons mdi mdi-database-outline",
-      "slug": "master-data",
+      "slug": ["master."],
       "submenu": [
         {
           "url": "/master/jenis-dokumen",
           "name": "Document Types",
-          "slug": "master-jenis-dokumen"
+          "slug": "master.jenis-dokumen.index"
         },
         {
           "url": "/master/departments",
           "name": "Divisi",
-          "slug": "master-departments"
+          "slug": "master.departments.index"
         },
         {
           "url": "/master/clinics",
           "name": "Klinik",
-          "slug": "master-clinics"
+          "slug": "master.clinics.index"
         }
       ]
     },
@@ -33,27 +33,32 @@
       "url": "javascript:void(0);",
       "name": "Document Control",
       "icon": "menu-icon tf-icons mdi mdi-file-document-outline",
-      "slug": "document-control",
+      "slug": ["documents."],
       "submenu": [
         {
+          "url": "/documents/gallery",
+          "name": "Lihat Dokumen",
+          "slug": "documents.gallery.index"
+        },
+        {
+          "url": "/documents",
+          "name": "Ringkasan",
+          "slug": "documents.control.index"
+        },
+        {
           "url": "/documents/upload",
-          "name": "Document Library",
-          "slug": "document-control-upload"
+          "name": "Kelola Dokumen",
+          "slug": "documents.index"
         },
         {
           "url": "/documents/distribution",
-          "name": "Distribution",
-          "slug": "document-control-distribution"
-        },
-        {
-          "url": "/documents/revisions",
-          "name": "Revisions",
-          "slug": "document-control-revisions"
+          "name": "Distribusi",
+          "slug": "documents.distribution.index"
         },
         {
           "url": "/documents/access-approvals",
-          "name": "Access Approvals",
-          "slug": "document-control-approvals"
+          "name": "Persetujuan",
+          "slug": "documents.approvals.index"
         }
       ]
     },
@@ -61,22 +66,22 @@
       "url": "javascript:void(0);",
       "name": "User Access",
       "icon": "menu-icon tf-icons mdi mdi-account-lock-outline",
-      "slug": "user-access",
+      "slug": ["access."],
       "submenu": [
         {
           "url": "/access/users",
           "name": "Users",
-          "slug": "access-users"
+          "slug": "access.users.index"
         },
         {
           "url": "/access/roles",
           "name": "Roles",
-          "slug": "access-roles"
+          "slug": "access.roles.index"
         },
         {
           "url": "/access/permissions",
           "name": "Permission Settings",
-          "slug": "access-permissions"
+          "slug": "access.permissions.index"
         }
       ]
     },
@@ -84,22 +89,22 @@
       "url": "javascript:void(0);",
       "name": "Settings",
       "icon": "menu-icon tf-icons mdi mdi-cog-outline",
-      "slug": "settings",
+      "slug": ["settings.", "system."],
       "submenu": [
         {
           "url": "/settings/watermark",
           "name": "Watermark/DRM",
-          "slug": "settings-watermark"
+          "slug": "settings.watermark"
         },
         {
           "url": "/system/framework",
           "name": "Framework System",
-          "slug": "system-framework"
+          "slug": "system.framework"
         },
         {
           "url": "/settings/document-access",
           "name": "Document Access",
-          "slug": "settings-document-access"
+          "slug": "settings.document-access"
         }
       ]
     }

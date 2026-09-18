@@ -2,7 +2,7 @@
 
 @section('title', 'Document Access - Open')
 
-@push('styles')
+@section('page-style')
 <style>
   .countdown-display {
     font-size: 1.25rem;
@@ -14,8 +14,14 @@
     text-transform: uppercase;
     color: #6c757d;
   }
+  .pdf-reader { background:#eef2f7; border:1px solid #dbe3ee; border-radius:12px; overflow:hidden; }
+  .pdf-toolbar { background:#243b53; padding:.75rem 1rem; display:flex; gap:.55rem; align-items:center; justify-content:center; color:#fff; position:sticky; top:0; z-index:2; }
+  .pdf-toolbar button { min-width:38px; }
+  #pdfPageLabel { min-width:115px; text-align:center; font-weight:600; font-size:.9rem; }
+  .pdf-page-wrap { padding:1.5rem; overflow:auto; }
+  #pdfCanvas { display:block; max-width:100%; height:auto; margin:auto; background:#fff; box-shadow:0 4px 18px rgba(36,59,83,.2); }
 </style>
-@endpush
+@endsection
 
 @section('content')
 <div class="row gy-4">
@@ -42,8 +48,18 @@
             <i class="mdi mdi-check-circle-outline mdi-24px"></i>
           </div>
           <div>
-            <h6 class="alert-heading mb-1">Akses dokumen sudah disetujui</h6>
-            @if(!empty($validUntil))
+            <h6 class="alert-heading mb-1">
+              @if(($accessSource ?? '') === 'DISTRIBUTION')
+                Akses dokumen tersedia karena dokumen sudah didistribusikan ke departemen Anda
+              @elseif(($accessSource ?? '') === 'OWNER')
+                Akses dokumen tersedia karena dokumen milik departemen Anda
+              @else
+                Akses dokumen sudah disetujui
+              @endif
+            </h6>
+
+            {{-- ✅ Hanya approval/request yang menampilkan validUntil --}}
+            @if(!empty($hasTimer) && !empty($validUntil))
               <p class="mb-0 small">
                 Anda dapat mengakses dokumen ini hingga:
                 <strong>{{ $validUntil->format('d M Y H:i') }}</strong>.
@@ -56,14 +72,12 @@
           </div>
         </div>
 
-        {{-- Timer (jika ada durasi) --}}
-        @if(!empty($remainingSeconds) && $remainingSeconds > 0)
+        {{-- ✅ Timer hanya jika hasTimer true --}}
+        @if(!empty($hasTimer) && !empty($remainingSeconds) && $remainingSeconds > 0)
           <div class="mb-4">
             <div class="d-flex align-items-center justify-content-between mb-1">
               <span class="countdown-label">Sisa waktu akses</span>
-              <span id="countdownDisplay" class="countdown-display text-primary">
-                {{-- akan diisi JS --}}
-              </span>
+              <span id="countdownDisplay" class="countdown-display text-primary"></span>
             </div>
             <div class="progress" style="height: 8px;">
               <div id="countdownProgress" class="progress-bar" role="progressbar"
@@ -76,16 +90,15 @@
         @endif
 
         {{-- Info tab baru --}}
-        <div class="mb-3">
-          <p class="mb-1">
-            Jendela baru yang berisi PDF sudah dibuka (jika tidak muncul, periksa pop-up blocker browser Anda).
-          </p>
-          <a id="btnOpenPdf"
-             href="{{ route('documents.file.raw', $document->id) }}"
-             target="_blank"
-             class="btn btn-primary">
-            <i class="mdi mdi-open-in-new me-1"></i> Buka PDF di Tab Baru
-          </a>
+        <div class="pdf-reader">
+          <div class="pdf-toolbar">
+            <button id="pdfPrev" class="btn btn-sm btn-light">‹</button>
+            <span id="pdfPageLabel">Memuat dokumen…</span>
+            <button id="pdfNext" class="btn btn-sm btn-light">›</button>
+            <button id="pdfZoomOut" class="btn btn-sm btn-outline-light">−</button>
+            <button id="pdfZoomIn" class="btn btn-sm btn-outline-light">+</button>
+          </div>
+          <div class="pdf-page-wrap"><canvas id="pdfCanvas"></canvas></div>
         </div>
 
       </div>
@@ -94,7 +107,7 @@
   </div>
 </div>
 
-{{-- Modal: Waktu akses habis --}}
+{{-- Modal: Waktu akses habis (hanya berguna kalau hasTimer true) --}}
 <div class="modal fade" id="accessExpiredModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content shadow">
@@ -124,29 +137,26 @@
 @section('page-script')
 <script>
   document.addEventListener('DOMContentLoaded', function () {
-    const rawUrl = @json(route('documents.file.raw', $document->id));
+    const rawUrl = @json(route('documents.gallery.file.raw', $document->id));
 
-    // Buka PDF di tab baru (kalau browser mengizinkan) dan simpan handlenya
-    let pdfWindow = window.open(rawUrl, '_blank');
-
-    // Hubungkan tombol "Buka PDF di Tab Baru" dengan pdfWindow,
-    // supaya kalau user klik manual, tab itu juga bisa ditutup saat waktu habis.
-    const openBtn = document.getElementById('btnOpenPdf');
-    if (openBtn) {
-      openBtn.addEventListener('click', function (e) {
-        e.preventDefault(); // cegah behaviour default agar kita bisa simpan handle-nya
-        pdfWindow = window.open(rawUrl, '_blank');
-      });
+    let pdfWindow = null;
+    const script = document.createElement('script'); script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => { pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; initPdf(); }; document.head.appendChild(script);
+    function initPdf() { let pdf, page = 1, scale = 1.65; const canvas = document.getElementById('pdfCanvas'), ctx = canvas.getContext('2d'), label = document.getElementById('pdfPageLabel');
+      const render = () => pdf.getPage(page).then(p => { const v = p.getViewport({scale}); canvas.width=v.width; canvas.height=v.height; p.render({canvasContext:ctx,viewport:v}); label.textContent=`Halaman ${page} / ${pdf.numPages}`; });
+      pdfjsLib.getDocument(rawUrl).promise.then(x => { pdf=x; render(); });
+      document.getElementById('pdfPrev').onclick=()=>{if(page>1){page--;render();}}; document.getElementById('pdfNext').onclick=()=>{if(page<pdf.numPages){page++;render();}};
+      document.getElementById('pdfZoomIn').onclick=()=>{scale=Math.min(2.5,scale+.15);render();}; document.getElementById('pdfZoomOut').onclick=()=>{scale=Math.max(.7,scale-.15);render();};
     }
 
-    // Kalau tidak ada timer (akses tanpa batas waktu), tidak perlu JS lanjutan
-    @if(empty($remainingSeconds) || $remainingSeconds <= 0)
-      return;
-    @endif
+    // ✅ kalau tidak pakai timer (distribution/owner) => stop di sini
+    const hasTimer = @json((bool)($hasTimer ?? false));
+    if (!hasTimer) return;
 
-    let remaining = {{ (int) $remainingSeconds }};
+    let remaining = {{ (int)($remainingSeconds ?? 0) }};
+    if (!remaining || remaining <= 0) return;
+
     const total = remaining;
-
     const displayEl    = document.getElementById('countdownDisplay');
     const progressEl   = document.getElementById('countdownProgress');
     const modalEl      = document.getElementById('accessExpiredModal');
@@ -168,16 +178,12 @@
       if (remaining <= 0) {
         displayEl.textContent = '00:00';
 
-        // Tutup tab PDF kalau masih terbuka dan browser mengizinkan
         try {
           if (pdfWindow && !pdfWindow.closed) {
             pdfWindow.close();
           }
-        } catch (e) {
-          // abaikan error (misal cross-origin / browser block)
-        }
+        } catch (e) {}
 
-        // Tampilkan modal Bootstrap TANPA refresh / redirect halaman
         if (typeof bootstrap !== 'undefined' && modalEl) {
           const expiredModal = new bootstrap.Modal(modalEl, {
             backdrop: 'static',
@@ -187,12 +193,10 @@
 
           if (btnExpiredOk) {
             btnExpiredOk.onclick = function () {
-              // Hanya tutup modal, tidak pindah halaman
               expiredModal.hide();
             };
           }
         } else {
-          // Fallback kalau bootstrap JS tidak tersedia
           alert('Waktu akses dokumen Anda sudah habis. Silakan ajukan permintaan akses lagi jika diperlukan.');
         }
 

@@ -12,25 +12,24 @@ class DocumentAccessRequest extends Model
     protected $table = 'document_access_requests';
 
     protected $fillable = [
-        'user_id',
+        'requester_user_id',
+        'requester_department_id',
         'document_id',
         'reason',
         'status',
-        'decided_by',
+        'decided_by_user_id',
         'decided_at',
-        'expires_at',
-        'requested_at',
+        'access_expires_at',
     ];
 
     protected $casts = [
-        'requested_at' => 'datetime',
         'decided_at'   => 'datetime',
-        'expires_at'   => 'datetime',
+        'access_expires_at' => 'datetime',
     ];
 
     public function user()
     {
-        return $this->belongsTo(\App\Models\User::class);
+        return $this->belongsTo(\App\Models\User::class, 'requester_user_id');
     }
 
     public function document()
@@ -40,6 +39,16 @@ class DocumentAccessRequest extends Model
 
     public function decider()
     {
-        return $this->belongsTo(\App\Models\User::class, 'decided_by');
+        return $this->belongsTo(\App\Models\User::class, 'decided_by_user_id');
+    }
+
+    public function getRequestedAtAttribute()
+    {
+        return $this->created_at;
+    }
+
+    public function getExpiresAtAttribute()
+    {
+        return $this->access_expires_at;
     }
 }

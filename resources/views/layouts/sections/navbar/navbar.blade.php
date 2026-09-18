@@ -61,31 +61,29 @@
         <a class="nav-link position-relative" href="#" data-bs-toggle="dropdown" aria-expanded="false">
           <i class="mdi mdi-bell-outline mdi-24px"></i>
 
-          @if($notifCount > 0)
-            <span class="badge bg-danger rounded-pill badge-notifications"
-                  style="position:absolute; top:0; right:-2px;">
+            <span id="notificationBadge" class="badge bg-danger rounded-pill badge-notifications"
+                  style="position:absolute; top:0; right:-2px; {{ $notifCount > 0 ? '' : 'display:none;' }}">
               {{ $notifCount }}
             </span>
-          @endif
         </a>
 
         <ul class="dropdown-menu dropdown-menu-end p-0" style="min-width: 360px;">
           <li class="px-3 py-2 border-bottom">
             <div class="d-flex align-items-center justify-content-between">
-              <h6 class="mb-0">Notifications</h6>
+              <h6 class="mb-0">Notifikasi Dokumen</h6>
 
               @if($notifCount > 0)
-                <form action="{{ route('notifications.readAll') }}" method="POST">
+                <form id="notificationReadAllForm" action="{{ route('notifications.readAll') }}" method="POST">
                   @csrf
                   <button type="submit" class="btn btn-link btn-sm p-0 text-decoration-none">
-                    Mark all as read
+                    Tandai semua dibaca
                   </button>
                 </form>
               @endif
             </div>
           </li>
 
-          {{-- Items --}}
+          <div id="notificationItems">
           @forelse($notifItems as $n)
             <li>
               <a class="dropdown-item py-3 d-flex gap-3"
@@ -108,15 +106,16 @@
           @empty
             <li>
               <div class="dropdown-item py-3 text-center text-muted">
-                No new notifications
+                Tidak ada notifikasi baru
               </div>
             </li>
           @endforelse
+          </div>
 
           <li><hr class="dropdown-divider my-0"></li>
           <li>
             <a class="dropdown-item text-center py-2" href="{{ route('documents.index') }}">
-              View all documents
+              Lihat semua dokumen
             </a>
           </li>
         </ul>
@@ -190,3 +189,81 @@
 @endif
 </nav>
 <!-- / Navbar -->
+
+@auth
+<script>
+(() => {
+  window.documentRealtimeConfig = {
+    userId: @json((string) auth()->id()),
+    key: @json(config('broadcasting.connections.reverb.key')),
+    host: @json(config('broadcasting.connections.reverb.options.host', '127.0.0.1')),
+    port: @json(config('broadcasting.connections.reverb.options.port', 8080)),
+    scheme: @json(config('broadcasting.connections.reverb.options.scheme', 'http')),
+    authEndpoint: @json(url('/broadcasting/auth'))
+  };
+  window.documentRealtimeConnected = false;
+  const feedUrl = @json(route('notifications.feed'));
+  const badge = document.getElementById('notificationBadge');
+  const list = document.getElementById('notificationItems');
+  const readAllForm = document.getElementById('notificationReadAllForm');
+
+  function renderNotifications(data) {
+    if (!badge || !list) return;
+    const count = Number(data.count || 0);
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = count > 0 ? '' : 'none';
+    list.replaceChildren();
+
+    if (!data.items || data.items.length === 0) {
+      const li = document.createElement('li');
+      li.innerHTML = '<div class="dropdown-item py-3 text-center text-muted"><i class="mdi mdi-check-circle-outline me-1"></i>Semua sudah dibaca</div>';
+      list.appendChild(li);
+      if (readAllForm) readAllForm.style.display = 'none';
+      return;
+    }
+
+    if (readAllForm) readAllForm.style.display = '';
+    data.items.forEach(item => {
+      const li = document.createElement('li');
+      const link = document.createElement('a');
+      link.className = 'dropdown-item py-3 d-flex gap-3';
+      link.href = item.url;
+
+      const icon = document.createElement('span');
+      icon.className = 'avatar avatar-sm flex-shrink-0 bg-label-primary d-flex align-items-center justify-content-center rounded-circle';
+      icon.innerHTML = '<i class="mdi mdi-file-outline"></i>';
+
+      const body = document.createElement('div');
+      body.className = 'flex-grow-1';
+      const title = document.createElement('div');
+      title.className = 'fw-semibold text-wrap';
+      title.textContent = item.name;
+      const meta = document.createElement('small');
+      meta.className = 'text-muted';
+      meta.textContent = item.number + ' • ' + item.time;
+      body.append(title, meta);
+      link.append(icon, body);
+      li.appendChild(link);
+      list.appendChild(li);
+    });
+  }
+
+  async function refreshNotifications() {
+    if (document.hidden) return;
+    try {
+      const response = await fetch(feedUrl, {headers:{'Accept':'application/json'}, credentials:'same-origin'});
+      if (response.ok) renderNotifications(await response.json());
+    } catch (_) {}
+  }
+
+  window.refreshDocumentNotifications = refreshNotifications;
+
+  window.addEventListener('load', refreshNotifications);
+  document.addEventListener('visibilitychange', refreshNotifications);
+  // Fallback ringan hanya saat WebSocket sedang terputus.
+  window.setInterval(() => {
+    if (!window.documentRealtimeConnected) refreshNotifications();
+  }, 30000);
+})();
+</script>
+@endauth

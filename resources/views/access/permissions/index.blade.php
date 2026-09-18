@@ -219,7 +219,7 @@
 </div>
 @endsection
 
-@push('page-script')
+@section('page-script')
 <script>
   (function () {
     // Update selected count
@@ -335,7 +335,7 @@
     });
   })();
 </script>
-@endpush
+@endsection
 
 @push('page-style')
 <style>

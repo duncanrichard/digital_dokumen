@@ -16,6 +16,8 @@ use App\Http\Controllers\Documents\DocumentUploadController;
 use App\Http\Controllers\Documents\DocumentDistributionController;
 use App\Http\Controllers\Documents\DocumentRevisionController;
 use App\Http\Controllers\Documents\DocumentAccessApprovalController;
+use App\Http\Controllers\Documents\DocumentGalleryController;
+use App\Http\Controllers\Documents\DocumentControlController;
 
 // User Access
 use App\Http\Controllers\Access\UserController;
@@ -77,20 +79,19 @@ Route::middleware('auth:web')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX
     */
     Route::prefix('master')->name('master.')->group(function () {
 
-        // ================= Jenis Dokumen =================
+        // Jenis Dokumen
         Route::get('/jenis-dokumen',  [JenisDokumenController::class, 'index'])->name('jenis-dokumen.index');
         Route::post('/jenis-dokumen', [JenisDokumenController::class, 'store'])->name('jenis-dokumen.store');
         Route::put('/jenis-dokumen/{jenisDokumen}',    [JenisDokumenController::class, 'update'])->name('jenis-dokumen.update');
         Route::delete('/jenis-dokumen/{jenisDokumen}', [JenisDokumenController::class, 'destroy'])->name('jenis-dokumen.destroy');
 
-        // ================= Departments (Divisi Utama) =================
+        // Departments (Divisi Utama)
         Route::get('/departments',  [DepartmentController::class, 'index'])->name('departments.index');
         Route::post('/departments', [DepartmentController::class, 'store'])->name('departments.store');
         Route::put('/departments/{department}',    [DepartmentController::class, 'update'])->name('departments.update');
         Route::delete('/departments/{department}', [DepartmentController::class, 'destroy'])->name('departments.destroy');
 
-        // ================= Departments Details (Cabang / Detail Divisi) =================
-        // NOTE: gunakan "details" (plural) agar konsisten dan cocok dengan blade
+        // Departments Details (Cabang / Detail Divisi)
         Route::post('/departments/{department}/details', [DepartmentController::class, 'storeDetail'])
             ->name('departments.details.store');
 
@@ -100,7 +101,7 @@ Route::middleware('auth:web')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX
         Route::delete('/departments/details/{detail}', [DepartmentController::class, 'destroyDetail'])
             ->name('departments.details.destroy');
 
-        // ================= Clinics =================
+        // Clinics
         Route::get('/clinics',  [ClinicController::class, 'index'])->name('clinics.index');
         Route::post('/clinics', [ClinicController::class, 'store'])->name('clinics.store');
         Route::put('/clinics/{clinic}',    [ClinicController::class, 'update'])->name('clinics.update');
@@ -114,6 +115,8 @@ Route::middleware('auth:web')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX
     */
     Route::post('/notifications/read-all', [DocumentUploadController::class, 'markAllNotificationsRead'])
         ->name('notifications.readAll');
+    Route::get('/notifications/feed', [DocumentUploadController::class, 'notificationFeed'])
+        ->name('notifications.feed');
 
     /*
     |--------------------------------------------------------------------------
@@ -121,12 +124,28 @@ Route::middleware('auth:web')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX
     |--------------------------------------------------------------------------
     */
     Route::prefix('documents')->name('documents.')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX) {
+        Route::get('/gallery/ai-search', [DocumentGalleryController::class, 'aiSearch'])->name('gallery.ai-search');
 
-        // Library & Upload
+        Route::get('/', [DocumentControlController::class, 'index'])->name('control.index');
+
+        // ✅ Document Gallery
+        Route::get('/gallery', [DocumentGalleryController::class, 'index'])
+            ->name('gallery.index');
+
+        // ✅ "Read" = Open (default) pindah ke sini
+        Route::get('/gallery/{document}/read', [DocumentGalleryController::class, 'read'])
+            ->where('document', $DOC_ID_REGEX)
+            ->name('gallery.read');
+// ✅ RAW PDF khusus Gallery (akses owner/distribution/approval)
+Route::get('/gallery/{document}/file/raw', [DocumentGalleryController::class, 'raw'])
+    ->where('document', $DOC_ID_REGEX)
+    ->name('gallery.file.raw');
+
+        // ✅ Library & Upload
         Route::get('/upload',  [DocumentUploadController::class, 'index'])->name('index');
         Route::post('/upload', [DocumentUploadController::class, 'store'])->name('store');
 
-        // Open PDF
+        // ✅ OPTIONAL (boleh hapus kalau sudah tidak dipakai)
         Route::get('/{document}/open', [DocumentUploadController::class, 'open'])
             ->where('document', $DOC_ID_REGEX)
             ->name('open');
@@ -136,7 +155,7 @@ Route::middleware('auth:web')->group(function () use ($DOC_ID_REGEX, $UUID_REGEX
             ->where('document', $DOC_ID_REGEX)
             ->name('file');
 
-        // Raw
+        // Raw (watermark)
         Route::get('/{document}/file/raw', [DocumentUploadController::class, 'rawFile'])
             ->where('document', $DOC_ID_REGEX)
             ->name('file.raw');

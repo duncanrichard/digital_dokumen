@@ -17,10 +17,12 @@
   .card-header .select2-container { min-width: 100%; }
   @media (min-width: 768px) { .card-header .select2-container { min-width: 220px; } }
 
-  .accordion-button { padding: 1rem 1.25rem; font-size: 0.95rem; }
-  .accordion-button:not(.collapsed) { background-color: #f8f9fa; color: #495057; box-shadow: none; }
+  #docTree { padding:0 1rem 1rem; display:grid; gap:.75rem; }
+  #docTree .accordion-item { border:1px solid #e7e9f0; border-radius:14px; overflow:visible; box-shadow:0 3px 12px rgba(34,48,74,.04); }
+  .accordion-button { padding: 1rem 1.25rem; font-size: 0.95rem; border-radius:14px !important; }
+  .accordion-button:not(.collapsed) { background:linear-gradient(135deg,#f6f8ff,#fff); color: #38455d; box-shadow: inset 4px 0 #696cff; }
   .accordion-button .doc-header { display: flex; width: 100%; align-items: center; gap: 1rem; flex-wrap: wrap; }
-  .doc-number { font-size: 1rem; font-weight: 600; color: #2c3e50; min-width: 200px; }
+  .doc-number { font-size: 1rem; font-weight: 700; color: #27364b; min-width: 200px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
   .doc-badges { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
   .doc-meta { margin-left: auto; display: flex; gap: 1rem; font-size: 0.85rem; color: #6c757d; }
   .badge-round { border-radius: 999px; padding: 0.35em 0.75em; font-size: 0.8rem; font-weight: 500; }
@@ -30,12 +32,18 @@
     background-color: #f8f9fa; font-weight: 600; font-size: 0.85rem;
     text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 2px solid #dee2e6;
   }
-  .table tbody tr:hover { background-color: #f8f9fa; }
+  .table tbody tr:hover { background-color: #f7f8ff; }
+  .table tbody td { vertical-align:middle; }
 
   .revision-badge { display: inline-block; min-width: 45px; text-align: center; }
   .status-badge { display: inline-block; min-width: 85px; text-align: center; font-weight: 600; }
 
   .btn-action { padding: 0.35rem 0.75rem; font-size: 0.85rem; border-radius: 0.25rem; }
+  .action-guide { border:1px solid #e7e9f0; border-radius:12px; background:#fafbff; }
+  .action-guide-item { height:100%; border-radius:10px; background:#fff; border:1px solid #edf0f6; }
+  .document-action-menu { min-width:320px; padding:.55rem; }
+  .document-action-menu .dropdown-item { border-radius:8px; padding:.65rem .75rem; white-space:normal; }
+  .document-action-menu .action-help { display:block; color:#8a8d93; font-size:.72rem; margin-left:1.7rem; }
 
   .empty-state { padding: 3rem 1rem; text-align: center; }
   .empty-state i { font-size: 4rem; color: #dee2e6; margin-bottom: 1rem; }
@@ -55,11 +63,20 @@
     .doc-number { min-width: 100%; margin-bottom: 0.5rem; }
     .doc-meta { margin-left: 0; width: 100%; justify-content: flex-start; }
     .accordion-button { padding: 0.75rem 1rem; }
+    #docTree { padding:0 .5rem .5rem; }
+    .action-guide { margin:.5rem !important; }
+    .document-action-menu { min-width:280px; }
+    .table thead { display:none; }
+    .table tbody tr { display:grid; grid-template-columns:70px 1fr; padding:.75rem; border-bottom:1px solid #edf0f6; }
+    .table tbody td { border:0; padding:.35rem !important; text-align:left !important; }
+    .table tbody td:nth-last-child(-n+3) { grid-column:1 / -1; }
+    .table tbody td:last-child .dropdown, .table tbody td:last-child .btn { width:100%; }
   }
 </style>
 @endpush
 
 @section('content')
+  @include('documents._legal_workflow')
 @php
   $me       = auth()->user();
   $role     = optional($me)->role;
@@ -107,13 +124,13 @@
       <div class="card-header bg-white border-bottom">
         <div class="d-flex flex-wrap align-items-center justify-content-between w-100 gap-3 py-2">
           <div>
-            <h4 class="card-title mb-1">📚 Document Library</h4>
-            <p class="text-muted mb-0 small">Managed controlled documents & company assets</p>
+            <h4 class="card-title mb-1"><i class="mdi mdi-file-document-multiple-outline me-1 text-primary"></i> Kelola Dokumen</h4>
+            <p class="text-muted mb-0 small">Satu dokumen dapat direvisi, diubah, diturunkan, dan didistribusikan.</p>
           </div>
 
           @if($canCreateNew)
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createModal" id="btnOpenCreate">
-              <i class="mdi mdi-plus me-1"></i> Add Document
+              <i class="mdi mdi-plus me-1"></i> Buat Dokumen Baru
             </button>
           @endif
         </div>
@@ -122,8 +139,8 @@
         <form method="get" class="mt-4">
           <div class="row g-3 align-items-end">
             <div class="col-12 col-md-3">
-              <label class="form-label small text-muted mb-1">Document Type</label>
-              <select name="document_type_id" class="form-select select2" data-placeholder="All types">
+              <label class="form-label small text-muted mb-1">Jenis Dokumen</label>
+              <select name="document_type_id" class="form-select select2" data-placeholder="Semua jenis">
                 <option value=""></option>
                 @foreach($documentTypes as $dt)
                   <option value="{{ $dt->id }}" {{ ($filterJenisId ?? '') === $dt->id ? 'selected' : '' }}>
@@ -134,7 +151,7 @@
             </div>
             <div class="col-12 col-md-3">
               <label class="form-label small text-muted mb-1">Divisi</label>
-              <select name="department_id" class="form-select select2" data-placeholder="All divisions">
+              <select name="department_id" class="form-select select2" data-placeholder="Semua divisi">
                 <option value=""></option>
                 @foreach($departments as $dep)
                   <option value="{{ $dep->id }}" {{ ($filterDeptId ?? '') === $dep->id ? 'selected' : '' }}>
@@ -144,12 +161,12 @@
               </select>
             </div>
             <div class="col-12 col-md-4">
-              <label class="form-label small text-muted mb-1">Search</label>
-              <input type="text" name="q" value="{{ $q ?? '' }}" class="form-control" placeholder="Search by name or number...">
+              <label class="form-label small text-muted mb-1">Cari Dokumen</label>
+              <input type="text" name="q" value="{{ $q ?? '' }}" class="form-control" placeholder="Ketik nama atau nomor dokumen...">
             </div>
             <div class="col-12 col-md-2 d-flex gap-2">
               <button type="submit" class="btn btn-primary flex-fill">
-                <i class="mdi mdi-magnify me-1"></i> Search
+                <i class="mdi mdi-magnify me-1"></i> Cari
               </button>
               @if(($filterJenisId ?? null) || ($filterDeptId ?? null) || ($q ?? ''))
                 <a href="{{ route('documents.index') }}" class="btn btn-outline-secondary" title="Clear filters">
@@ -162,6 +179,14 @@
       </div>
 
       <div class="card-body p-0">
+        <div class="action-guide m-3 p-3">
+          <div class="fw-semibold mb-2">Pahami tindakan dokumen</div>
+          <div class="row g-2">
+            <div class="col-md-4"><div class="action-guide-item p-3"><span class="badge bg-label-primary mb-2">REVISI</span><div class="fw-semibold">Nomor tetap</div><small class="text-muted">Isi diperbarui, misalnya R0 menjadi R1.</small></div></div>
+            <div class="col-md-4"><div class="action-guide-item p-3"><span class="badge bg-label-warning mb-2">UBAH</span><div class="fw-semibold">Membuat nomor baru</div><small class="text-muted">Dokumen baru tetap merujuk dokumen sebelumnya.</small></div></div>
+            <div class="col-md-4"><div class="action-guide-item p-3"><span class="badge bg-label-info mb-2">TURUNAN</span><div class="fw-semibold">Untuk cabang atau klinik</div><small class="text-muted">Membuat dokumen turunan dari dokumen pusat.</small></div></div>
+          </div>
+        </div>
         @php
           $grouped = collect($items->items() ?? [])->groupBy('document_number');
         @endphp
@@ -169,8 +194,8 @@
         @if($grouped->isEmpty())
           <div class="empty-state">
             <i class="mdi mdi-file-document-outline"></i>
-            <h5 class="text-muted">No Documents Found</h5>
-            <p class="text-muted small">Start by adding your first document using the "Add Document" button above.</p>
+            <h5 class="text-muted">Dokumen tidak ditemukan</h5>
+            <p class="text-muted small">Ubah filter pencarian atau buat dokumen baru.</p>
           </div>
         @else
           <div class="accordion accordion-flush" id="docTree">
@@ -194,15 +219,15 @@
                       </div>
                       <div class="doc-badges">
                         <span class="badge bg-light text-dark border">
-                          <i class="mdi mdi-file-multiple"></i> {{ $rows->count() }} version{{ $rows->count() > 1 ? 's' : '' }}
+                          <i class="mdi mdi-file-multiple"></i> {{ $rows->count() }} versi
                         </span>
-                        <span class="badge bg-primary badge-round">Latest: R{{ $latest->revision ?? 0 }}</span>
+                        <span class="badge bg-primary badge-round">Terbaru: R{{ $latest->revision ?? 0 }}</span>
                         @if($latest->is_active)
-                          <span class="badge bg-success badge-round">Active</span>
+                          <span class="badge bg-success badge-round">Aktif</span>
                         @endif
                         @if(!$latest->read_notifikasi)
                           <span class="badge bg-danger badge-round">
-                            <i class="mdi mdi-bell-ring-outline me-1"></i> New
+                            <i class="mdi mdi-bell-ring-outline me-1"></i> Baru
                           </span>
                         @endif
                       </div>
@@ -222,26 +247,14 @@
                       <table class="table table-hover align-middle mb-0">
                         <thead>
                           <tr>
-                            <th class="col-idx text-center">#</th>
-                            <th class="text-center">Revision</th>
-                            <th class="text-center text-nowrap">Document Name</th>
-                            <th class="text-center">Type</th>
-                            <th class="text-center">Divisi</th>
-                            <th class="text-center text-nowrap">Publish Date</th>
+                            <th class="text-center">Revisi</th>
+                            <th>Dokumen</th>
+                            <th>Jenis, Divisi & Tanggal</th>
                             <th class="text-center">Status</th>
-                            <th class="text-center">Perubahan</th>
-                            <th class="text-center">File</th>
+                            <th class="text-center">Buka</th>
 
-                            @if($canChangeToNew)
-                              <th class="text-center">Di Ubah</th>
-                            @endif
-
-                            @if($canturunanclinic)
-                              <th class="text-center">Turunan Klinik</th>
-                            @endif
-
-                            @if($canUpdate || $canDelete)
-                              <th class="col-aksi text-center">Actions</th>
+                            @if($canUpdate || $canDelete || $canChangeToNew || $canturunanclinic)
+                              <th class="col-aksi text-center">Tindakan Dokumen</th>
                             @endif
                           </tr>
                         </thead>
@@ -253,17 +266,13 @@
                             @endphp
 
                             <tr>
-                              <td class="text-center text-muted small">
-                                {{ $items->firstItem() + $loop->parent->index + $loop->index }}
-                              </td>
-
                               <td class="text-center">
                                 <span class="badge revision-badge {{ $row->revision == ($latest->revision ?? 0) ? 'bg-primary' : 'bg-secondary' }}">
                                   R{{ $row->revision ?? 0 }}
                                 </span>
                               </td>
 
-                              <td class="text-nowrap">
+                              <td style="min-width:240px">
                                 <div class="doc-name-main">{{ $row->name }}</div>
 
                                 @if($changedFrom)
@@ -275,42 +284,34 @@
                                     </a>
                                   </div>
                                 @endif
+                                @if($changedTo)
+                                  <div class="doc-name-meta mt-1">
+                                    <span class="badge bg-label-warning"><i class="mdi mdi-file-replace-outline me-1"></i>Diganti oleh</span>
+                                    <a href="{{ route('documents.file', $changedTo->id) }}" class="doc-name-meta-number text-decoration-none">
+                                      {{ $changedTo->display_number ?? ($changedTo->document_number.' R'.$changedTo->revision) }}
+                                    </a>
+                                  </div>
+                                @endif
                               </td>
 
-                              <td class="text-center">
-                                <span class="badge bg-light text-dark border">{{ $row->jenisDokumen->kode ?? '' }}</span>
-                              </td>
-
-                              <td class="text-center">
-                                <span class="badge bg-light text-dark border">{{ $row->department->code ?? '' }}</span>
-                              </td>
-
-                              <td class="text-center text-nowrap small">
-                                {{ \Carbon\Carbon::parse($row->publish_date)->format('d M Y') }}
+                              <td style="min-width:220px">
+                                <div class="d-flex flex-wrap gap-1 mb-1">
+                                  <span class="badge bg-light text-dark border">{{ $row->jenisDokumen->kode ?? '-' }}</span>
+                                  <span class="badge bg-light text-dark border">{{ $row->department->code ?? '-' }}</span>
+                                </div>
+                                <div class="small text-muted"><i class="mdi mdi-office-building-outline me-1"></i>{{ $row->department->name ?? '-' }}</div>
+                                <div class="small text-muted"><i class="mdi mdi-calendar-outline me-1"></i>{{ \Carbon\Carbon::parse($row->publish_date)->format('d M Y') }}</div>
                               </td>
 
                               <td class="text-center">
                                 @if($row->is_active)
                                   <span class="badge status-badge bg-success text-white rounded-pill">
-                                    <i class="mdi mdi-check-circle me-1"></i>Active
+                                    <i class="mdi mdi-check-circle me-1"></i>Aktif
                                   </span>
                                 @else
                                   <span class="badge status-badge bg-danger text-white rounded-pill">
-                                    <i class="mdi mdi-close-circle me-1"></i>Inactive
+                                    <i class="mdi mdi-close-circle me-1"></i>Nonaktif
                                   </span>
-                                @endif
-                              </td>
-
-                              <td class="text-center">
-                                @if($changedTo)
-                                  <a href="{{ route('documents.file', $changedTo->id) }}"
-                                     class="badge bg-warning text-dark rounded-pill"
-                                     title="Lihat dokumen baru">
-                                    <i class="mdi mdi-link-variant me-1"></i>
-                                    {{ $changedTo->display_number ?? ($changedTo->document_number.' R'.$changedTo->revision) }}
-                                  </a>
-                                @else
-                                  <span class="text-muted small">-</span>
                                 @endif
                               </td>
 
@@ -324,44 +325,53 @@
                                 </div>
                               </td>
 
-                              {{-- Di Ubah --}}
-                              @if($canChangeToNew)
-                                <td class="text-center">
-                                  <button type="button"
-                                          class="btn btn-sm btn-outline-warning btn-change-document"
-                                          data-source_id="{{ $row->id }}"
-                                          data-document_type_id="{{ $row->jenis_dokumen_id }}"
-                                          data-department_id="{{ $row->department_id }}"
-                                          data-name="{{ $row->name }}"
-                                          data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
-                                          data-notes="{{ $row->notes ?? '' }}">
-                                    <i class="mdi mdi-file-replace-outline me-1"></i> Ubah
-                                  </button>
-                                </td>
-                              @endif
-
-                              {{-- Turunan Klinik --}}
-                              @if($canturunanclinic)
-                                <td class="text-center">
-                                  <button type="button"
-                                          class="btn btn-sm btn-outline-info btn-derive-clinic"
-                                          data-source_id="{{ $row->id }}"
-                                          data-name="{{ $row->name }}"
-                                          data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
-                                          data-notes="{{ $row->notes ?? '' }}">
-                                    <i class="mdi mdi-hospital-building me-1"></i> Turunkan
-                                  </button>
-                                </td>
-                              @endif
-
                               {{-- Actions --}}
-                              @if($canUpdate || $canDelete)
+                              @if($canUpdate || $canDelete || $canChangeToNew || $canturunanclinic)
                                 <td class="text-center">
                                   <div class="dropdown">
-                                    <button type="button" class="btn btn-sm btn-text-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                                      <i class="mdi mdi-dots-vertical"></i>
+                                    <button type="button" class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                                      <i class="mdi mdi-format-list-bulleted me-1"></i> Pilih Tindakan
                                     </button>
-                                    <ul class="dropdown-menu">
+                                    <ul class="dropdown-menu dropdown-menu-end document-action-menu">
+                                      <li>
+                                        <a class="dropdown-item" href="{{ route('documents.distribution.index', ['document_ids' => [$row->id]]) }}">
+                                          <i class="mdi mdi-share-variant-outline me-2 text-info"></i><strong>Atur distribusi</strong>
+                                          <span class="action-help">Pilih divisi, cabang, atau orang penerima.</span>
+                                        </a>
+                                      </li>
+                                      <li>
+                                        <a class="dropdown-item" href="{{ route('documents.revisions.index', ['base_id' => $row->id]) }}">
+                                          <i class="mdi mdi-file-restore-outline me-2 text-primary"></i><strong>Buat revisi R{{ ($row->revision ?? 0) + 1 }}</strong>
+                                          <span class="action-help">Nomor dokumen tetap, angka revisi bertambah.</span>
+                                        </a>
+                                      </li>
+                                      @if($canChangeToNew)
+                                        <li>
+                                          <button type="button" class="dropdown-item btn-change-document"
+                                                  data-source_id="{{ $row->id }}"
+                                                  data-document_type_id="{{ $row->jenis_dokumen_id }}"
+                                                  data-department_id="{{ $row->department_id }}"
+                                                  data-name="{{ $row->name }}"
+                                                  data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
+                                                  data-notes="{{ $row->notes ?? '' }}">
+                                            <i class="mdi mdi-file-replace-outline me-2 text-warning"></i><strong>Ubah menjadi dokumen baru</strong>
+                                            <span class="action-help">Membuat nomor baru yang merujuk dokumen ini.</span>
+                                          </button>
+                                        </li>
+                                      @endif
+                                      @if($canturunanclinic)
+                                        <li>
+                                          <button type="button" class="dropdown-item btn-derive-clinic"
+                                                  data-source_id="{{ $row->id }}"
+                                                  data-name="{{ $row->name }}"
+                                                  data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
+                                                  data-notes="{{ $row->notes ?? '' }}">
+                                            <i class="mdi mdi-source-branch me-2 text-info"></i><strong>Buat dokumen turunan</strong>
+                                            <span class="action-help">Turunkan dokumen pusat ke cabang atau klinik.</span>
+                                          </button>
+                                        </li>
+                                      @endif
+                                      <li><hr class="dropdown-divider"></li>
                                       @if($canUpdate)
                                         <li>
                                           <a href="javascript:void(0);" class="dropdown-item btn-edit-document"
@@ -374,7 +384,8 @@
                                              data-is_active="{{ $row->is_active ? 1 : 0 }}"
                                              data-notes="{{ $row->notes ?? '' }}"
                                              data-bs-toggle="modal" data-bs-target="#editModal">
-                                            <i class="mdi mdi-pencil-outline me-2"></i> Edit
+                                            <i class="mdi mdi-pencil-outline me-2"></i><strong>Edit metadata</strong>
+                                            <span class="action-help">Perbaiki nama, tanggal, status, atau file.</span>
                                           </a>
                                         </li>
                                       @endif
@@ -387,7 +398,7 @@
                                         <li>
                                           <a href="#" class="dropdown-item text-danger btn-delete-document"
                                              data-delete-url="{{ route('documents.destroy', $row->id) }}">
-                                            <i class="mdi mdi-trash-can-outline me-2"></i> Delete
+                                            <i class="mdi mdi-trash-can-outline me-2"></i> Hapus dokumen
                                           </a>
                                         </li>
                                       @endif
@@ -412,7 +423,7 @@
       @if($items->hasPages())
         <div class="card-footer bg-white d-flex justify-content-between align-items-center">
           <div class="text-muted small">
-            Showing {{ $items->firstItem() }} to {{ $items->lastItem() }} of {{ $items->total() }} documents
+            Menampilkan {{ $items->firstItem() }}–{{ $items->lastItem() }} dari {{ $items->total() }} dokumen
           </div>
           {{ $items->links() }}
         </div>

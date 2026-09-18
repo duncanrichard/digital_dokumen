@@ -17,6 +17,7 @@
 @endpush
 
 @section('content')
+  @include('documents._legal_workflow')
 <div class="row gy-4">
   <div class="col-12">
 
@@ -32,7 +33,7 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between w-100 gap-3 py-2">
           <div>
             <h4 class="card-title mb-1">📝 Revisions</h4>
-            <p class="text-muted mb-0 small">Kelola dan buat revisi dari dokumen yang sudah ada</p>
+            <p class="text-muted mb-0 small">Revisi mempertahankan nomor dokumen dan hanya menambah R1, R2, dan seterusnya.</p>
           </div>
         </div>
 
@@ -201,7 +202,7 @@
         @csrf
         <input type="hidden" name="base_id" id="rev_base_id" value="">
         <div class="modal-header border-0">
-          <h5 class="modal-title fw-semibold" id="reviseModalLabel">Create Revision</h5>
+          <h5 class="modal-title fw-semibold" id="reviseModalLabel">Buat Revisi Dokumen</h5>
           <button type="button" class="btn btn-icon btn-text-secondary" data-bs-dismiss="modal" aria-label="Close">
             <i class="mdi mdi-close"></i>
           </button>
@@ -210,13 +211,13 @@
           <div class="alert alert-secondary small mb-3 d-none" id="rev_info"></div>
 
           <div class="mb-3">
-            <label class="form-label required">Document Name</label>
+            <label class="form-label required">Nama Dokumen Revisi</label>
             <input type="text" class="form-control" name="document_name" required placeholder="Nama dokumen (versi revisi)">
           </div>
 
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label required">Publish Date</label>
+              <label class="form-label required">Tanggal Berlaku</label>
               <input type="date" class="form-control" name="publish_date" required>
             </div>
             <div class="col-md-6 mb-3">
@@ -229,15 +230,21 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label required">Upload Document (PDF)</label>
+            <label class="form-label required">File Revisi (PDF)</label>
             <input type="file" class="form-control" name="file" accept="application/pdf,.pdf" required>
             <small class="text-muted">PDF only. Max 10MB.</small>
           </div>
+
+          <div class="mb-3">
+            <label class="form-label">Keterangan Dokumen</label>
+            <textarea class="form-control" name="notes" id="rev_notes" rows="3" placeholder="Jelaskan isi atau perubahan revisi (opsional)">{{ old('notes') }}</textarea>
+            <small class="text-muted">Keterangan dari revisi sebelumnya akan diikuti dan masih dapat diedit.</small>
+          </div>
         </div>
         <div class="modal-footer border-0">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
           <button type="submit" class="btn btn-primary">
-            <i class="mdi mdi-file-restore-outline"></i> Create Revision
+            <i class="mdi mdi-file-restore-outline"></i> Simpan Revisi
           </button>
         </div>
       </form>
@@ -288,6 +295,17 @@
 
     document.addEventListener('DOMContentLoaded', function () {
       initSelect2();
+
+      @if($selectedBase)
+        $('#rev_base_id').val(@json($selectedBase->id));
+        const info = document.getElementById('rev_info');
+        info.classList.remove('d-none');
+        info.innerHTML = '<strong>Dokumen asal:</strong> ' + @json($selectedBase->document_number) +
+          ' &nbsp; <span class="badge bg-primary">Revisi berikutnya: R{{ ($selectedBase->revision ?? 0) + 1 }}</span>';
+        document.querySelector('#formRevise [name="document_name"]').value = @json($selectedBase->name);
+        document.querySelector('#formRevise [name="notes"]').value = @json(old('notes', $selectedBase->notes));
+        new bootstrap.Modal(document.getElementById('reviseModal')).show();
+      @endif
     });
   })();
 </script>

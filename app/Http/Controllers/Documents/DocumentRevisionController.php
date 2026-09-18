@@ -34,7 +34,10 @@ class DocumentRevisionController extends Controller
 
             // CEK PERMISSION BERDASARKAN ROLE
             // pastikan nama permission sama persis dg di seeder & di tabel permissions
-            $hasPermission = $role && $role->hasPermissionTo('documents.revisions.view');
+            $hasPermission = $role && $role->permissions()
+                ->where('name', 'documents.revisions.view')
+                ->where('guard_name', 'web')
+                ->exists();
 
             if (! $hasPermission) {
                 abort(403, 'Anda tidak memiliki izin untuk mengakses halaman Revisi Dokumen.');
@@ -76,6 +79,9 @@ class DocumentRevisionController extends Controller
 
         // Grouping per nomor dasar
         $grouped = collect($items->items())->groupBy('document_number');
+        $selectedBase = $request->filled('base_id')
+            ? Document::select('id', 'document_number', 'revision', 'name', 'notes')->find($request->get('base_id'))
+            : null;
 
         return view('documents.revisions.index', compact(
             'items',
@@ -84,7 +90,8 @@ class DocumentRevisionController extends Controller
             'documentTypes',
             'departments',
             'filterJenisId',
-            'filterDeptId'
+            'filterDeptId',
+            'selectedBase'
         ));
     }
 
@@ -99,12 +106,13 @@ class DocumentRevisionController extends Controller
             'publish_date'   => ['required','date'],
             'file'           => ['required','file','mimes:pdf','max:10240'],
             'is_active'      => ['nullable','in:1'],
+            'notes'          => ['nullable','string'],
         ]);
 
         $storedPath = $request->file('file')->store('documents', 'public');
 
         // Ambil baris base (untuk ambil nomor dasar, jenis & dept)
-        $base = Document::with(['jenisDokumen:id,kode', 'department:id,code'])
+        $base = Document::with(['jenisDokumen:id,kode', 'department:id,code', 'distributedDepartments:id', 'distributedUsers:id'])
             ->findOrFail($validated['base_id']);
 
         // Revisi maksimum dari nomor dasar ini
@@ -116,7 +124,7 @@ class DocumentRevisionController extends Controller
             Document::where('document_number', $base->document_number)->update(['is_active' => false]);
 
             // Buat versi baru
-            Document::create([
+            $revision = Document::create([
                 'jenis_dokumen_id' => $base->jenis_dokumen_id,
                 'department_id'    => $base->department_id,
                 'sequence'         => $base->sequence,
@@ -126,7 +134,11 @@ class DocumentRevisionController extends Controller
                 'publish_date'     => $validated['publish_date'],
                 'file_path'        => $storedPath,
                 'is_active'        => $request->boolean('is_active', true),
+                'notes'            => $validated['notes'] ?? $base->notes,
             ]);
+
+            $revision->distributedDepartments()->sync($base->distributedDepartments->pluck('id')->all());
+            $revision->distributedUsers()->sync($base->distributedUsers->pluck('id')->all());
         });
 
         return redirect()

@@ -127,6 +127,8 @@ mixAssetsDir('css/**/*.css', (src, dest) => mix.copy(src, dest));
 
 mix.copy('node_modules/@mdi/font/fonts/*', 'public/assets/vendor/fonts/materialdesignicons');
 
+mix.js('resources/js/realtime.js', 'public/js');
+
 mix.version();
 
 /*

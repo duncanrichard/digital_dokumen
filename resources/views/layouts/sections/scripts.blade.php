@@ -43,6 +43,9 @@
 
 <!-- BEGIN: Theme JS -->
 <script src="{{ mix_or_asset('assets/js/main.js') }}"></script>
+@auth
+<script src="{{ mix_or_asset('js/realtime.js') }}"></script>
+@endauth
 <!-- END: Theme JS -->
 
 <!-- Pricing Modal (opsional dari template) -->

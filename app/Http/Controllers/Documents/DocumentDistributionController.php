@@ -9,8 +9,10 @@ use Illuminate\Validation\Rule;
 use App\Models\Document;
 use App\Models\DocumentDistribution;
 use App\Models\Department;
+use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use App\Services\DocumentNotificationBroadcaster;
 
 class DocumentDistributionController extends Controller
 {
@@ -96,13 +98,26 @@ class DocumentDistributionController extends Controller
             ->keyBy('id');
 
         $selectedDepartmentsByDoc = [];
+        $selectedUsersByDoc = [];
         if ($selectedDocs->isNotEmpty()) {
             $distributions = DocumentDistribution::whereIn('document_id', $selectedDocs->pluck('id'))->get();
             $selectedDepartmentsByDoc = $distributions
                 ->groupBy('document_id')
                 ->map(fn($rows) => $rows->pluck('department_id')->all())
                 ->toArray();
+
+            $selectedUsersByDoc = DB::table('document_user_distributions')
+                ->whereIn('document_id', $selectedDocs->pluck('id'))
+                ->get()
+                ->groupBy('document_id')
+                ->map(fn($rows) => $rows->pluck('user_id')->all())
+                ->toArray();
         }
+
+        $users = User::with('department:id,name')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'username', 'department_id']);
 
         return view('documents.distribution.index', [
             'q'                        => $q,
@@ -114,6 +129,8 @@ class DocumentDistributionController extends Controller
             'departmentsDjc'           => $departmentsDjc,
             'departmentsOther'         => $departmentsOther,
             'selectedDepartmentsByDoc' => $selectedDepartmentsByDoc,
+            'selectedUsersByDoc'       => $selectedUsersByDoc,
+            'users'                    => $users,
         ]);
     }
 
@@ -133,6 +150,10 @@ class DocumentDistributionController extends Controller
                 Rule::exists('departments', 'id')->where(fn($q) => $q->where('is_active', true)),
             ],
 
+            'user_distribution'     => ['nullable', 'array'],
+            'user_distribution.*'   => ['nullable', 'array'],
+            'user_distribution.*.*' => ['uuid', Rule::exists('users', 'id')->where(fn($q) => $q->where('is_active', true))],
+
             'send_whatsapp' => ['nullable', 'boolean'],
         ]);
 
@@ -149,9 +170,11 @@ class DocumentDistributionController extends Controller
         }
 
         $distributionInput = $data['distribution'] ?? [];
+        $userDistributionInput = $data['user_distribution'] ?? [];
 
         // docId => deptIds yang dipilih user
         $perDocDeptIds = [];
+        $perDocUserIds = [];
         foreach ($documents as $doc) {
             $docId = (string) $doc->id;
 
@@ -160,9 +183,14 @@ class DocumentDistributionController extends Controller
 
             $idsFromForm = array_values(array_unique(array_filter(array_map('strval', $idsFromForm))));
             $perDocDeptIds[$docId] = $idsFromForm;
+
+            $userIds = $userDistributionInput[$docId] ?? [];
+            $perDocUserIds[$docId] = is_array($userIds)
+                ? array_values(array_unique(array_filter(array_map('strval', $userIds))))
+                : [];
         }
 
-        DB::transaction(function () use ($perDocDeptIds) {
+        DB::transaction(function () use ($perDocDeptIds, $perDocUserIds) {
             foreach ($perDocDeptIds as $documentId => $deptIds) {
                 DocumentDistribution::where('document_id', $documentId)->delete();
 
@@ -180,8 +208,25 @@ class DocumentDistributionController extends Controller
                     }
                     DocumentDistribution::insert($rows);
                 }
+
+                DB::table('document_user_distributions')->where('document_id', $documentId)->delete();
+                if (!empty($perDocUserIds[$documentId])) {
+                    $now = now();
+                    DB::table('document_user_distributions')->insert(
+                        collect($perDocUserIds[$documentId])->map(fn($userId) => [
+                            'document_id' => $documentId,
+                            'user_id' => $userId,
+                            'created_at' => $now,
+                            'updated_at' => $now,
+                        ])->all()
+                    );
+                }
             }
         });
+
+        foreach ($documents as $document) {
+            app(DocumentNotificationBroadcaster::class)->broadcast($document->fresh());
+        }
 
         $sendWa = $request->boolean('send_whatsapp');
         if ($sendWa) {

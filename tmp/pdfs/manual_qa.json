@@ -1,0 +1,296 @@
+[
+  {
+    "page": 1,
+    "title": "Manual Book\nSistem Dokumen",
+    "scale": 1,
+    "bottom": 340.4
+  },
+  {
+    "page": 2,
+    "title": "Daftar isi",
+    "scale": 0.882,
+    "bottom": 57.0
+  },
+  {
+    "page": 3,
+    "title": "Gambaran umum & peta menu",
+    "scale": 1,
+    "bottom": 170.1
+  },
+  {
+    "page": 4,
+    "title": "Peran dan hak akses",
+    "scale": 1,
+    "bottom": 236.5
+  },
+  {
+    "page": 5,
+    "title": "Alur besar pengendalian dokumen",
+    "scale": 1,
+    "bottom": 67.7
+  },
+  {
+    "page": 6,
+    "title": "Login, dashboard & ringkasan",
+    "scale": 1,
+    "bottom": 248.0
+  },
+  {
+    "page": 7,
+    "title": "Master jenis dokumen & klinik",
+    "scale": 1,
+    "bottom": 182.7
+  },
+  {
+    "page": 8,
+    "title": "Master divisi, cabang & WhatsApp",
+    "scale": 1,
+    "bottom": 183.8
+  },
+  {
+    "page": 9,
+    "title": "Upload dokumen baru",
+    "scale": 1,
+    "bottom": 203.3
+  },
+  {
+    "page": 10,
+    "title": "Alur upload & penomoran",
+    "scale": 1,
+    "bottom": 67.3
+  },
+  {
+    "page": 11,
+    "title": "Edit metadata, status & hapus",
+    "scale": 1,
+    "bottom": 211.9
+  },
+  {
+    "page": 12,
+    "title": "Membuat revisi dokumen",
+    "scale": 1,
+    "bottom": 139.0
+  },
+  {
+    "page": 13,
+    "title": "Mengganti menjadi dokumen baru",
+    "scale": 1,
+    "bottom": 89.8
+  },
+  {
+    "page": 14,
+    "title": "Membuat turunan klinik",
+    "scale": 1,
+    "bottom": 97.1
+  },
+  {
+    "page": 15,
+    "title": "Mengatur distribusi",
+    "scale": 1,
+    "bottom": 174.7
+  },
+  {
+    "page": 16,
+    "title": "Alur distribusi & perubahan penerima",
+    "scale": 1,
+    "bottom": 70.1
+  },
+  {
+    "page": 17,
+    "title": "Galeri & pencarian AI",
+    "scale": 1,
+    "bottom": 147.8
+  },
+  {
+    "page": 18,
+    "title": "Membaca PDF & memahami akses",
+    "scale": 1,
+    "bottom": 205.3
+  },
+  {
+    "page": 19,
+    "title": "Mengajukan akses dokumen",
+    "scale": 1,
+    "bottom": 67.0
+  },
+  {
+    "page": 20,
+    "title": "Memproses persetujuan akses",
+    "scale": 1,
+    "bottom": 207.5
+  },
+  {
+    "page": 21,
+    "title": "Notifikasi aplikasi & WhatsApp",
+    "scale": 1,
+    "bottom": 152.7
+  },
+  {
+    "page": 22,
+    "title": "Mengelola pengguna & HRIS",
+    "scale": 1,
+    "bottom": 207.0
+  },
+  {
+    "page": 23,
+    "title": "Mengelola role & permission",
+    "scale": 1,
+    "bottom": 137.5
+  },
+  {
+    "page": 24,
+    "title": "Pengaturan watermark / DRM",
+    "scale": 1,
+    "bottom": 173.6
+  },
+  {
+    "page": 25,
+    "title": "Document Access & Framework System",
+    "scale": 1,
+    "bottom": 193.7
+  },
+  {
+    "page": 26,
+    "title": "Contoh penggunaan lengkap",
+    "scale": 1,
+    "bottom": 215.2
+  },
+  {
+    "page": 27,
+    "title": "Penanganan masalah",
+    "scale": 1,
+    "bottom": 173.3
+  },
+  {
+    "page": 28,
+    "title": "Pertanyaan umum / FAQ",
+    "scale": 1,
+    "bottom": 176.7
+  },
+  {
+    "page": 29,
+    "title": "Glosarium & checklist kerja",
+    "scale": 1,
+    "bottom": 148.9
+  },
+  {
+    "page": 30,
+    "title": "Lampiran admin: verifikasi & sumber",
+    "scale": 1,
+    "bottom": 135.5
+  },
+  {
+    "page": 31,
+    "title": "Referensi tombol & form",
+    "scale": 1,
+    "bottom": 240.6
+  },
+  {
+    "page": 32,
+    "title": "Menu Login & Dashboard",
+    "scale": 1,
+    "bottom": 284.8
+  },
+  {
+    "page": 33,
+    "title": "Menu Master Data > Document Types",
+    "scale": 1,
+    "bottom": 294.1
+  },
+  {
+    "page": 34,
+    "title": "Menu Master Data > Divisi",
+    "scale": 1,
+    "bottom": 139.5
+  },
+  {
+    "page": 35,
+    "title": "Menu Master Data > Klinik",
+    "scale": 1,
+    "bottom": 308.6
+  },
+  {
+    "page": 36,
+    "title": "Menu Kelola Dokumen: daftar & filter",
+    "scale": 1,
+    "bottom": 286.2
+  },
+  {
+    "page": 37,
+    "title": "Form Add Document",
+    "scale": 1,
+    "bottom": 254.7
+  },
+  {
+    "page": 38,
+    "title": "Menu Pilih Tindakan pada dokumen",
+    "scale": 1,
+    "bottom": 261.2
+  },
+  {
+    "page": 39,
+    "title": "Menu Revisions",
+    "scale": 1,
+    "bottom": 226.9
+  },
+  {
+    "page": 40,
+    "title": "Menu Distribusi: memilih dokumen",
+    "scale": 1,
+    "bottom": 370.7
+  },
+  {
+    "page": 41,
+    "title": "Menu Distribusi: penerima & tombol simpan",
+    "scale": 1,
+    "bottom": 213.1
+  },
+  {
+    "page": 42,
+    "title": "Menu Lihat Dokumen / Gallery",
+    "scale": 1,
+    "bottom": 251.3
+  },
+  {
+    "page": 43,
+    "title": "Menu Viewer PDF & halaman Pending",
+    "scale": 1,
+    "bottom": 279.4
+  },
+  {
+    "page": 44,
+    "title": "Menu Persetujuan Akses",
+    "scale": 1,
+    "bottom": 201.7
+  },
+  {
+    "page": 45,
+    "title": "Menu Users",
+    "scale": 1,
+    "bottom": 202.2
+  },
+  {
+    "page": 46,
+    "title": "Menu Roles & Permission Settings",
+    "scale": 1,
+    "bottom": 263.7
+  },
+  {
+    "page": 47,
+    "title": "Menu Settings: Watermark / DRM",
+    "scale": 1,
+    "bottom": 239.3
+  },
+  {
+    "page": 48,
+    "title": "Menu Settings: Document Access & Framework",
+    "scale": 1,
+    "bottom": 333.0
+  },
+  {
+    "page": 49,
+    "title": "Checklist menu per pekerjaan",
+    "scale": 1,
+    "bottom": 274.2
+  }
+]

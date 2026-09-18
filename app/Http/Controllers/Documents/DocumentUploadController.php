@@ -18,6 +18,7 @@ use Carbon\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use setasign\Fpdi\Fpdi;
 use Illuminate\Support\Facades\Log;
+use App\Events\DocumentNotificationUpdated;
 
 class DocumentUploadController extends Controller
 {
@@ -245,7 +246,7 @@ class DocumentUploadController extends Controller
         // MODE: REVISE
         // =========================================================
         if (!empty($validated['revise_of'])) {
-            $base = Document::with(['distributedDepartments:id'])->findOrFail($validated['revise_of']);
+            $base = Document::with(['distributedDepartments:id', 'distributedUsers:id'])->findOrFail($validated['revise_of']);
 
             $maxRevision  = (int) Document::where('document_number', $base->document_number)->max('revision');
             $nextRevision = $maxRevision + 1;
@@ -267,11 +268,16 @@ class DocumentUploadController extends Controller
                     'file_path'        => $storedPath,
                     'is_active'        => $isActive,
                     'read_notifikasi'  => 0,
-                    'notes'            => $validated['notes'] ?? null,
+                    // Keterangan diwariskan dari revisi sebelumnya, namun tetap
+                    // dapat diubah melalui field notes pada form revisi.
+                    'notes'            => array_key_exists('notes', $validated) && $validated['notes'] !== null
+                        ? $validated['notes']
+                        : $base->notes,
                 ]);
 
                 $baseDistIds = $base->distributedDepartments()->pluck('departments.id')->all();
                 $doc->distributedDepartments()->sync(!empty($baseDistIds) ? $baseDistIds : [$base->department_id]);
+                $doc->distributedUsers()->sync($base->distributedUsers->pluck('id')->all());
             });
 
             return redirect()->route('documents.index')
@@ -283,7 +289,7 @@ class DocumentUploadController extends Controller
         // =========================================================
         if ($from === 'derive_clinic') {
             try {
-                $base   = Document::with(['distributedDepartments:id'])->findOrFail($validated['derive_of']);
+                $base   = Document::with(['distributedDepartments:id', 'distributedUsers:id'])->findOrFail($validated['derive_of']);
                 $clinic = Clinic::select('id', 'code', 'name')->findOrFail($validated['clinic_id']);
 
                 $derivedNumber = "{$base->document_number}-{$clinic->code}";
@@ -315,6 +321,7 @@ class DocumentUploadController extends Controller
 
                     $baseDistIds = $base->distributedDepartments()->pluck('departments.id')->all();
                     $doc->distributedDepartments()->sync(!empty($baseDistIds) ? $baseDistIds : [$base->department_id]);
+                    $doc->distributedUsers()->sync($base->distributedUsers->pluck('id')->all());
 
                     $base->changedToDocuments()->syncWithoutDetaching([
                         $doc->id => ['relation_type' => 'derived_clinic'],
@@ -394,7 +401,7 @@ class DocumentUploadController extends Controller
 
             // MODE CHANGE: relasi + copy distribusi lama
             if ($changeOfId) {
-                $old = Document::with('distributedDepartments:id')->find($changeOfId);
+                $old = Document::with(['distributedDepartments:id', 'distributedUsers:id'])->find($changeOfId);
 
                 if ($old) {
                     $old->changedToDocuments()->syncWithoutDetaching([
@@ -405,6 +412,7 @@ class DocumentUploadController extends Controller
                     if (!empty($oldDistIds)) {
                         $doc->distributedDepartments()->sync($oldDistIds);
                     }
+                    $doc->distributedUsers()->sync($old->distributedUsers->pluck('id')->all());
                 }
             }
         });
@@ -493,6 +501,10 @@ class DocumentUploadController extends Controller
 
             $document->update($payload);
 
+            if ($newPath) {
+                DB::table('document_notification_reads')->where('document_id', $document->id)->delete();
+            }
+
             if ($newPath && $oldPath && Storage::disk('public')->exists($oldPath)) {
                 Storage::disk('public')->delete($oldPath);
             }
@@ -540,9 +552,10 @@ class DocumentUploadController extends Controller
      */
     public function open(Document $document)
     {
-        if (!$document->read_notifikasi) {
-            $document->forceFill(['read_notifikasi' => 1])->save();
-        }
+        $document->notificationReaders()->syncWithoutDetaching([
+            Auth::id() => ['read_at' => now()],
+        ]);
+        rescue(fn () => DocumentNotificationUpdated::dispatch((string) Auth::id(), (string) $document->id), report: true);
 
         if (!$document->file_path || !Storage::disk('public')->exists($document->file_path)) {
             abort(404, 'File not found.');
@@ -553,8 +566,50 @@ class DocumentUploadController extends Controller
 
     public function markAllNotificationsRead()
     {
-        Document::where('read_notifikasi', false)->update(['read_notifikasi' => true]);
-        return back()->with('success', 'All notifications marked as read.');
+        $user = Auth::user();
+        $ids = $this->notificationQueryFor($user)->pluck('documents.id');
+        $now = now();
+
+        DB::table('document_notification_reads')->insertOrIgnore(
+            $ids->map(fn ($id) => ['document_id' => $id, 'user_id' => $user->id, 'read_at' => $now])->all()
+        );
+        rescue(fn () => DocumentNotificationUpdated::dispatch((string) $user->id, 'all'), report: true);
+
+        return back()->with('success', 'Semua notifikasi sudah dibaca.');
+    }
+
+    public function notificationFeed()
+    {
+        $items = $this->notificationQueryFor(Auth::user())
+            ->orderByDesc('documents.created_at')
+            ->limit(10)
+            ->get(['documents.id', 'documents.name', 'documents.document_number', 'documents.revision', 'documents.created_at']);
+
+        return response()->json([
+            'count' => $this->notificationQueryFor(Auth::user())->count(),
+            'items' => $items->map(fn ($document) => [
+                'id' => $document->id,
+                'name' => $document->name,
+                'number' => $document->document_number.' R'.($document->revision ?? 0),
+                'time' => optional($document->created_at)->diffForHumans(),
+                'url' => route('documents.open', $document),
+            ])->values(),
+        ]);
+    }
+
+    protected function notificationQueryFor($user)
+    {
+        return Document::query()
+            ->whereDoesntHave('notificationReaders', fn ($query) => $query->where('users.id', $user->id))
+            ->where(function ($query) use ($user) {
+                if (!$user->department_id) {
+                    return;
+                }
+
+                $query->where('department_id', $user->department_id)
+                    ->orWhereHas('distributedDepartments', fn ($departments) => $departments->where('departments.id', $user->department_id))
+                    ->orWhereHas('distributedUsers', fn ($users) => $users->where('users.id', $user->id));
+            });
     }
 
     // ================== GATE: CEK AKSES ==================
@@ -667,7 +722,7 @@ class DocumentUploadController extends Controller
         $accessSetting  = DocumentAccessSetting::first();
         $useTimedAccess = $accessSetting && $accessSetting->enabled && $accessSetting->default_duration_minutes;
 
-        $approvedRequest = DocumentAccessRequest::where('user_id', $user->id)
+        $approvedRequest = DocumentAccessRequest::where('requester_user_id', $user->id)
             ->where('document_id', $document->id)
             ->where('status', 'approved')
             ->orderByDesc('decided_at')
@@ -683,8 +738,8 @@ class DocumentUploadController extends Controller
                     ? (clone $startTime)->addMinutes($accessSetting->default_duration_minutes)
                     : now()->addMinutes($accessSetting->default_duration_minutes);
 
-                if (!$approvedRequest->expires_at || !$approvedRequest->expires_at->eq($validUntil)) {
-                    $approvedRequest->expires_at = $validUntil;
+                if (!$approvedRequest->access_expires_at || !$approvedRequest->access_expires_at->eq($validUntil)) {
+                    $approvedRequest->access_expires_at = $validUntil;
                     $approvedRequest->save();
                 }
 
@@ -704,20 +759,20 @@ class DocumentUploadController extends Controller
             if ($createPending) {
                 $pendingRequest = DocumentAccessRequest::firstOrCreate(
                     [
-                        'user_id'     => $user->id,
+                        'requester_user_id' => $user->id,
+                        'requester_department_id' => $user->department_id,
                         'document_id' => $document->id,
                         'status'      => 'pending',
                     ],
                     [
                         'reason'       => null,
-                        'requested_at' => now(),
                     ]
                 );
             } else {
-                $pendingRequest = DocumentAccessRequest::where('user_id', $user->id)
+                $pendingRequest = DocumentAccessRequest::where('requester_user_id', $user->id)
                     ->where('document_id', $document->id)
                     ->where('status', 'pending')
-                    ->latest('requested_at')
+                    ->latest('created_at')
                     ->first();
             }
 

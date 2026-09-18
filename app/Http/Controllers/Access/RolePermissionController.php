@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Role;
 use App\Models\Permission;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -168,7 +169,7 @@ class RolePermissionController extends Controller
         $data = $request->validate([
             'role_id'       => ['required', 'uuid', 'exists:roles,id'],
             'permissions'   => ['array'],
-            'permissions.*' => ['string'],
+            'permissions.*' => ['string', 'distinct', 'exists:permissions,name'],
         ], [], [
             'role_id' => 'Role',
         ]);
@@ -178,11 +179,10 @@ class RolePermissionController extends Controller
 
         $permissionNames = $data['permissions'] ?? [];
 
-        // Sinkronisasi permission ke role
-        $role->syncPermissions($permissionNames);
-
-        // reset cache permission Spatie
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        DB::transaction(function () use ($role, $permissionNames) {
+            $role->syncPermissions($permissionNames);
+            app(PermissionRegistrar::class)->forgetCachedPermissions();
+        });
 
         return redirect()
             ->route('access.permissions.index', ['role_id' => $role->id])

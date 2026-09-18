@@ -41,6 +41,15 @@
 @endpush
 
 @section('content')
+  @if(isset($hrisAvailable) && !$hrisAvailable)
+    <div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+      <i class="mdi mdi-database-alert-outline mdi-24px"></i>
+      <div>
+        <strong>HRIS sedang offline</strong>
+        <div class="small">{{ $hrisError }} Sinkronisasi otomatis dan pilihan karyawan HRIS dinonaktifkan sementara.</div>
+      </div>
+    </div>
+  @endif
 @php
   $me       = auth()->user();
   $role     = optional($me)->role;
@@ -162,12 +171,12 @@
 
                     {{-- HRIS EMPLOYEE (OPSIONAL) --}}
                     <div class="mb-3">
-                      <label class="form-label">HRIS Employee (optional)</label>
+                      <label class="form-label">Karyawan HRIS (opsional)</label>
                       <select name="hris_employee_id"
                               id="hris_employee_id"
                               class="form-select select2 @error('hris_employee_id') is-invalid @enderror"
                               data-placeholder="Select employee from HRIS"
-                              @if($isHrisEdit) disabled @endif>
+                              @if($isHrisEdit || (isset($hrisAvailable) && !$hrisAvailable)) disabled @endif>
                         <option value=""></option>
                         @foreach($employees as $emp)
                           <option value="{{ $emp->id }}"
@@ -187,7 +196,11 @@
                         <div class="invalid-feedback">{{ $message }}</div>
                       @enderror
                       <small class="text-muted d-block mt-1">
-                        Jika dipilih: <strong>Name</strong>, <strong>Username</strong>, dan <strong>Email</strong> akan mengikuti data HRIS.
+                        @if(isset($hrisAvailable) && !$hrisAvailable)
+                          Pilihan HRIS tidak tersedia. Gunakan input pengguna lokal di bawah.
+                        @else
+                          Jika dipilih, nama, username, dan email akan mengikuti data HRIS.
+                        @endif
                       </small>
                     </div>
 

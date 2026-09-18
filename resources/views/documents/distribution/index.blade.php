@@ -7,9 +7,26 @@
   <link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
 @endsection
 
+<div class="modal fade" id="primaryDivisionAlert" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header border-0">
+        <h5 class="modal-title"><i class="mdi mdi-information-outline text-warning me-2"></i>Informasi</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+      </div>
+      <div class="modal-body pt-0">Divisi utama tidak dapat dihapus dari distribusi dokumen.</div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Mengerti</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 @push('styles')
 <style>
   .select2-container { width: 100% !important; }
+  .select2-container--bootstrap-5 .select2-selection--multiple { min-height: 46px; padding: .35rem .5rem; border-radius: .5rem; }
+  .select2-container--bootstrap-5 .select2-selection--multiple .select2-selection__choice { margin-top: .2rem; }
 
   .document-card { transition: all 0.3s ease; border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
   .document-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); transform: translateY(-2px); }
@@ -22,6 +39,11 @@
   .dept-card.selected { border-color: #667eea; background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%); }
 
   .dept-card .form-check-input:checked { background-color: #667eea; border-color: #667eea; }
+  .select-badge { cursor: pointer; width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+  .selection-hint { cursor: pointer; }
+  /* Pemilihan divisi dilakukan melalui tombol +/centang pada kartu. */
+  .dept-card .parent-row,
+  .dept-card > .form-check { display: none !important; }
 
   .info-card { background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%); border: none; border-left: 4px solid #667eea; border-radius: 10px; }
 
@@ -51,15 +73,17 @@
 @section('content')
 <div class="container-xxl flex-grow-1 container-p-y">
 
+  @include('documents._legal_workflow')
+
   {{-- Header --}}
   <div class="header-gradient">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
       <div>
         <h3 class="mb-2 fw-bold">
           <i class="mdi mdi-file-document-multiple-outline me-2"></i>
-          Document Distribution
+          Distribusi Dokumen
         </h3>
-        <p class="mb-0 opacity-90">Manage document distribution to divisions (multi document)</p>
+        <p class="mb-0 opacity-90">Kirim dokumen ke divisi, cabang, atau orang tertentu dalam satu langkah.</p>
       </div>
       <div class="search-box p-2">
         <form method="GET" action="{{ route('documents.distribution.index') }}" class="d-flex gap-2">
@@ -282,14 +306,14 @@
                             </div>
                           </div>
 
-                          <span class="badge select-badge {{ $isCheckedParent ? 'bg-success' : 'bg-light text-muted' }} rounded-pill">
+                          <span role="button" tabindex="0" title="Klik untuk memilih divisi" data-primary="{{ $isPrimary ? 1 : 0 }}" class="badge select-badge {{ $isCheckedParent ? 'bg-success' : 'bg-light text-muted' }} rounded-pill">
                             <i class="mdi {{ $isCheckedParent ? 'mdi-check' : 'mdi-plus' }}"></i>
                           </span>
                         </div>
 
                         {{-- HAS CHILDREN --}}
                         @if($hasChildren)
-                          <div class="parent-row">
+                          <div class="parent-row" style="display:none !important;">
                             <label class="form-check mb-0 d-flex align-items-center gap-2" style="cursor:pointer;">
                               <input class="form-check-input parent-checkbox"
                                      type="checkbox"
@@ -298,7 +322,7 @@
                                      data-primary="{{ $isPrimary ? 1 : 0 }}"
                                      data-doc-id="{{ $doc->id }}"
                                      data-parent-id="{{ $dep->id }}">
-                              <span class="form-check-label">Pilih Divisi</span>
+                              <span class="form-check-label selection-hint">Klik tanda + untuk memilih divisi</span>
                             </label>
                           </div>
 
@@ -384,14 +408,14 @@
 
                         {{-- NO CHILDREN --}}
                         @else
-                          <div class="form-check mt-2">
+                          <div class="form-check mt-2" style="display:none !important;">
                             <input class="form-check-input dep-checkbox"
                                    type="checkbox"
                                    name="distribution[{{ $doc->id }}][]"
                                    value="{{ $dep->id }}"
                                    @checked(in_array($dep->id, $selectedForDoc, true))
                                    data-primary="{{ $isPrimary ? 1 : 0 }}">
-                            <label class="form-check-label">Pilih</label>
+                            <label class="form-check-label selection-hint">Klik tanda + untuk memilih</label>
                           </div>
                         @endif
 
@@ -427,6 +451,27 @@
               @endif
 
             </div>
+
+            <div class="card border-primary-subtle mb-4">
+              <div class="card-body">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                  <span class="avatar-initial rounded bg-label-primary p-2"><i class="mdi mdi-account-multiple-plus-outline"></i></span>
+                  <div>
+                    <h6 class="mb-0">Distribusi langsung per orang</h6>
+                    <small class="text-muted">Opsional. Orang yang dipilih dapat membuka dokumen walaupun divisinya tidak dipilih.</small>
+                  </div>
+                </div>
+                <select class="form-select select2" name="user_distribution[{{ $doc->id }}][]" multiple
+                        data-placeholder="Cari nama atau username penerima...">
+                  @foreach($users as $recipient)
+                    <option value="{{ $recipient->id }}"
+                      @selected(in_array($recipient->id, $selectedUsersByDoc[$doc->id] ?? [], true))>
+                      {{ $recipient->name }} ({{ $recipient->username }}) — {{ $recipient->department->name ?? 'Tanpa divisi' }}
+                    </option>
+                  @endforeach
+                </select>
+              </div>
+            </div>
           @endforeach
 
           {{-- Footer --}}
@@ -434,7 +479,7 @@
             <div class="d-flex flex-wrap gap-3 justify-content-between align-items-start align-items-md-center">
               <div class="text-muted small">
                 <i class="mdi mdi-information-outline me-1"></i>
-                Main Division is optional now.
+                Pilih penerima berdasarkan divisi, cabang, orang tertentu, atau kombinasinya.
               </div>
 
               <div class="d-flex flex-column flex-md-row gap-3 align-items-stretch align-items-md-center">
@@ -451,7 +496,7 @@
                     <i class="mdi mdi-refresh me-1"></i> Reset
                   </a>
                   <button type="submit" class="btn btn-primary action-btn">
-                    <i class="mdi mdi-content-save-outline me-1"></i> Save Distribution
+                    <i class="mdi mdi-send-check-outline me-1"></i> Simpan & Distribusikan
                   </button>
                 </div>
               </div>
@@ -491,6 +536,19 @@
         document.getElementById('formPickDoc').submit();
       });
     }
+
+    $('.select2[name^="user_distribution["]').each(function () {
+      const $userSelect = $(this);
+      if ($userSelect.hasClass('select2-hidden-accessible')) $userSelect.select2('destroy');
+      $userSelect.select2({
+        theme: 'bootstrap-5',
+        width: '100%',
+        placeholder: $userSelect.data('placeholder') || 'Cari dan pilih penerima...',
+        closeOnSelect: false,
+        allowClear: true,
+        dropdownParent: $userSelect.closest('.card')
+      });
+    });
   }
 
   function setCardSelected(card, selected) {
@@ -597,6 +655,34 @@
       });
     });
   }
+
+  // Tanda + menjadi kontrol utama pemilihan divisi.
+  document.addEventListener('click', function (event) {
+    const badge = event.target.closest('.dept-card .select-badge');
+    if (!badge) return;
+    const card = badge.closest('.dept-card');
+    const checkbox = card && card.querySelector('.dep-checkbox, .parent-checkbox');
+    if (checkbox) {
+      if (badge.dataset.primary === '1' && checkbox.checked) {
+        const modalElement = document.getElementById('primaryDivisionAlert');
+        if (modalElement && window.bootstrap) {
+          bootstrap.Modal.getOrCreateInstance(modalElement).show();
+        }
+        return;
+      }
+      checkbox.checked = !checkbox.checked;
+      // Saat divisi utama dimatikan, hapus juga pilihan cabangnya agar kartu
+      // benar-benar kembali tidak terpilih.
+      if (!checkbox.checked && checkbox.classList.contains('parent-checkbox')) {
+        const wrap = document.getElementById(`childInputWrap_${checkbox.dataset.docId}_${checkbox.dataset.parentId}`);
+        if (wrap) wrap.innerHTML = '';
+        setChildCount(checkbox.dataset.docId, checkbox.dataset.parentId, 0);
+        const modal = document.getElementById(`modalChild_${checkbox.dataset.docId}_${checkbox.dataset.parentId}`);
+        if (modal) modal.querySelectorAll('.child-checkbox').forEach(child => child.checked = false);
+      }
+      checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
 
   function initChildModalSave() {
     document.querySelectorAll('.btn-save-child').forEach(btn => {

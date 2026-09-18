@@ -9,6 +9,7 @@ use App\Models\Department;
 use App\Models\JenisDokumen;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Carbon\Carbon;
 
 class Analytics extends Controller
@@ -26,7 +27,13 @@ class Analytics extends Controller
             if ($isSuperadmin) return $next($request);
 
             $role = $user->role;
-            $hasPermission = $role && $role->hasPermissionTo('dashboard.analytics.view');
+
+            // Query relasi secara langsung agar permission yang belum tersinkron
+            // tidak memicu PermissionDoesNotExist dari Spatie setelah login.
+            $hasPermission = $role && $role->permissions()
+                ->where('name', 'dashboard.analytics.view')
+                ->where('guard_name', 'web')
+                ->exists();
 
             if (!$hasPermission) {
                 abort(403, 'Anda tidak memiliki izin untuk mengakses Dashboard Analytics.');
@@ -73,19 +80,25 @@ class Analytics extends Controller
             $avgRevisionPerDoc = $revisionPerDoc->avg('max_rev') ?: 0;
 
             // 2) Akses dokumen
-            $pendingAccessRequests  = DocumentAccessRequest::where('status', 'pending')->count();
-            $approvedAccessRequests = DocumentAccessRequest::where('status', 'approved')->count();
-            $rejectedAccessRequests = DocumentAccessRequest::where('status', 'rejected')->count();
+            $pendingAccessRequests  = DocumentAccessRequest::whereRaw('UPPER(status) = ?', ['PENDING'])->count();
+            $approvedAccessRequests = DocumentAccessRequest::whereRaw('UPPER(status) = ?', ['APPROVED'])->count();
+            $rejectedAccessRequests = DocumentAccessRequest::whereRaw('UPPER(status) = ?', ['REJECTED'])->count();
 
-            $accessThisMonthRaw = DocumentAccessRequest::whereDate('requested_at', '>=', $startOfMonth)
+            // Beberapa instalasi lama belum mempunyai requested_at. Pada skema
+            // tersebut created_at adalah waktu permintaan akses yang valid.
+            $accessRequestedAtColumn = Schema::hasColumn('document_access_requests', 'requested_at')
+                ? 'requested_at'
+                : 'created_at';
+
+            $accessThisMonthRaw = DocumentAccessRequest::whereDate($accessRequestedAtColumn, '>=', $startOfMonth)
                 ->select('status', DB::raw('COUNT(*) AS total'))
                 ->groupBy('status')
                 ->get();
 
             $accessThisMonth = [
-                'pending'  => (int) ($accessThisMonthRaw->firstWhere('status', 'pending')->total ?? 0),
-                'approved' => (int) ($accessThisMonthRaw->firstWhere('status', 'approved')->total ?? 0),
-                'rejected' => (int) ($accessThisMonthRaw->firstWhere('status', 'rejected')->total ?? 0),
+                'pending'  => (int) $accessThisMonthRaw->filter(fn ($row) => strtoupper($row->status) === 'PENDING')->sum('total'),
+                'approved' => (int) $accessThisMonthRaw->filter(fn ($row) => strtoupper($row->status) === 'APPROVED')->sum('total'),
+                'rejected' => (int) $accessThisMonthRaw->filter(fn ($row) => strtoupper($row->status) === 'REJECTED')->sum('total'),
             ];
 
             // 3) Master data
@@ -178,6 +191,7 @@ class Analytics extends Controller
                 'department:id,code,name',
                 'clinic:id,code,name',
                 'distributedDepartments:id',
+                'distributedUsers:id',
             ])
             ->when($q !== '', function ($query) use ($q) {
                 $needle = mb_strtolower($q);
@@ -187,12 +201,24 @@ class Analytics extends Controller
                 });
             })
             ->when($filterJenisId, fn($qq) => $qq->where('jenis_dokumen_id', $filterJenisId))
-            ->when($lockDeptId, function ($qq) use ($lockDeptId) {
-                $qq->where(function ($sub) use ($lockDeptId) {
+            ->when($lockDeptId || $me?->id, function ($qq) use ($lockDeptId, $me) {
+                $qq->where(function ($sub) use ($lockDeptId, $me) {
+                    if (!$lockDeptId) {
+                        $sub->whereRaw('1 = 0');
+                    }
+
+                    if ($lockDeptId) {
                     $sub->where('department_id', $lockDeptId)
                         ->orWhereHas('distributedDepartments', function ($qdep) use ($lockDeptId) {
                             $qdep->where('departments.id', $lockDeptId);
                         });
+                    }
+
+                    if ($me?->id) {
+                        $sub->orWhereHas('distributedUsers', function ($quser) use ($me) {
+                            $quser->where('users.id', $me->id);
+                        });
+                    }
                 });
             })
             // tampilkan yang paling relevan: aktif dulu, terbaru dulu

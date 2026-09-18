@@ -285,7 +285,7 @@
 
               <div class="card-footer bg-white border-0 pt-0">
                 <div class="d-grid gap-2">
-                  <a href="{{ route('documents.file', $doc->id) }}" class="btn btn-outline-primary">
+                  <a href="{{ route('documents.gallery.read', $doc->id) }}" class="btn btn-outline-primary">
                     <i class="mdi mdi-eye-outline me-1"></i> Open
                   </a>
                 </div>

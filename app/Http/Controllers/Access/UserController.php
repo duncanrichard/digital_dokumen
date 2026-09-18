@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -41,7 +42,12 @@ class UserController extends Controller
                 default  => 'access.users.view',
             };
 
-            if (! $user->role || ! $user->role->hasPermissionTo($requiredPermission)) {
+            $hasPermission = $user->role && $user->role->permissions()
+                ->where('name', $requiredPermission)
+                ->where('guard_name', 'web')
+                ->exists();
+
+            if (! $hasPermission) {
                 abort(403, 'Anda tidak memiliki izin untuk mengakses fitur ini.');
             }
 
@@ -58,8 +64,27 @@ class UserController extends Controller
         $filterDeptId = $request->get('department_id');
         $filterStatus = $request->get('status');
 
-        // auto sync HRIS
-        $this->syncHrisUsers();
+        $hrisAvailable = true;
+        $hrisError = null;
+
+        try {
+            DB::connection('mysql_hris')->getPdo();
+            $this->syncHrisUsers();
+        } catch (\Throwable $exception) {
+            $hrisAvailable = false;
+            $hrisError = 'HRIS sedang tidak terhubung. Data pengguna lokal tetap dapat dikelola.';
+            Log::warning('HRIS unavailable on user management page', [
+                'message' => $exception->getMessage(),
+            ]);
+        }
+
+        $userRelations = [
+            'department:id,code,name',
+            'role:id,name',
+        ];
+        if ($hrisAvailable) {
+            $userRelations[] = 'hrisEmployee:id,name,email,office_phone';
+        }
 
         $departments = Department::where('is_active', true)
             ->orderBy('name')
@@ -70,11 +95,7 @@ class UserController extends Controller
         $editUser      = null;
         $editingHrisId = null;
         if ($request->filled('edit')) {
-            $editUser = User::with([
-                    'department:id,code,name',
-                    'role:id,name',
-                    'hrisEmployee:id,name,email,office_phone',
-                ])->findOrFail($request->input('edit'));
+            $editUser = User::with($userRelations)->findOrFail($request->input('edit'));
 
             $editingHrisId = $editUser->hris_employee_id;
         }
@@ -86,16 +107,14 @@ class UserController extends Controller
             ->pluck('hris_employee_id')
             ->toArray();
 
-        $employees = Employee::whereNotIn('id', $usedHrisIds)
-            ->orderBy('name')
-            ->limit(200)
-            ->get(['id', 'name', 'email', 'office_phone']);
+        $employees = $hrisAvailable
+            ? Employee::whereNotIn('id', $usedHrisIds)
+                ->orderBy('name')
+                ->limit(200)
+                ->get(['id', 'name', 'email', 'office_phone'])
+            : collect();
 
-        $items = User::with([
-                'department:id,code,name',
-                'role:id,name',
-                'hrisEmployee:id,name,email,office_phone',
-            ])
+        $items = User::with($userRelations)
             ->search($q)
             ->when($filterDeptId, fn($qb) => $qb->where('department_id', $filterDeptId))
             ->status($filterStatus)
@@ -111,7 +130,9 @@ class UserController extends Controller
             'q',
             'filterDeptId',
             'filterStatus',
-            'editUser'
+            'editUser',
+            'hrisAvailable',
+            'hrisError'
         ));
     }
 

@@ -30,7 +30,10 @@ class DocumentAccessApprovalController extends Controller
 
             // cek permission pada ROLE (bukan $user->can)
             // nama permission HARUS sama dengan di seeder
-            $hasPermission = $role && $role->hasPermissionTo('documents.access-approvals.view');
+            $hasPermission = $role && $role->permissions()
+                ->where('name', 'documents.access-approvals.view')
+                ->where('guard_name', 'web')
+                ->exists();
 
             if (! $hasPermission) {
                 abort(403, 'Anda tidak memiliki izin untuk mengakses halaman Persetujuan Akses Dokumen.');
@@ -50,9 +53,9 @@ class DocumentAccessApprovalController extends Controller
                 'document.department:id,code,name',
                 'decider:id,name',
             ])
-            ->when($status, fn($q) => $q->where('status', $status))
-            ->orderByDesc('requested_at')
-            ->paginate(20)
+            ->when($status, fn($q) => $q->whereRaw('LOWER(status) = ?', [strtolower($status)]))
+            ->orderByDesc('created_at')
+            ->paginate(10)
             ->withQueryString();
 
         return view('documents.access-approvals.index', compact('items', 'status'));
@@ -60,7 +63,7 @@ class DocumentAccessApprovalController extends Controller
 
     public function approve(Request $request, DocumentAccessRequest $accessRequest)
     {
-        if ($accessRequest->status !== 'pending') {
+        if (strtolower($accessRequest->status) !== 'pending') {
             return back()->with('error', 'Permintaan ini sudah diproses.');
         }
 
@@ -70,9 +73,9 @@ class DocumentAccessApprovalController extends Controller
 
         $accessRequest->update([
             'status'     => 'approved',
-            'decided_by' => Auth::id(),
+            'decided_by_user_id' => Auth::id(),
             'decided_at' => now(),
-            'expires_at' => $validated['expires_at'] ?? null,
+            'access_expires_at' => $validated['expires_at'] ?? null,
         ]);
 
         return back()->with('success', 'Permintaan akses sudah disetujui.');
@@ -80,13 +83,13 @@ class DocumentAccessApprovalController extends Controller
 
     public function reject(DocumentAccessRequest $accessRequest)
     {
-        if ($accessRequest->status !== 'pending') {
+        if (strtolower($accessRequest->status) !== 'pending') {
             return back()->with('error', 'Permintaan ini sudah diproses.');
         }
 
         $accessRequest->update([
             'status'     => 'rejected',
-            'decided_by' => Auth::id(),
+            'decided_by_user_id' => Auth::id(),
             'decided_at' => now(),
         ]);
 

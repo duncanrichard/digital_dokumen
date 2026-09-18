@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Pagination\Paginator;
 use App\Models\Document;
+use App\Services\DocumentNotificationBroadcaster;
+use Illuminate\Support\Facades\DB;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,6 +29,16 @@ class AppServiceProvider extends ServiceProvider
     {
         // Pastikan pagination Laravel memakai Bootstrap 5 (cocok dengan Materio)
         Paginator::useBootstrapFive();
+
+        Document::created(function (Document $document) {
+            DB::afterCommit(fn () => app(DocumentNotificationBroadcaster::class)->broadcast($document->fresh()));
+        });
+
+        Document::updated(function (Document $document) {
+            if ($document->wasChanged(['file_path', 'is_active'])) {
+                DB::afterCommit(fn () => app(DocumentNotificationBroadcaster::class)->broadcast($document->fresh()));
+            }
+        });
 
         // Supply data notifikasi ke semua view (bisa dibatasi ke layout tertentu jika perlu)
         View::composer('*', function ($view) {
@@ -51,27 +63,30 @@ class AppServiceProvider extends ServiceProvider
             $user = Auth::user();
             $deptId = $user->department_id; // bisa null
 
-            // Cache singkat biar ringan; akan invalid saat flag read_notifikasi berubah,
-            // jadi TTL rendah (mis. 15 detik) cukup aman.
+            // Cache sangat singkat; navbar juga memperbarui data lewat feed realtime.
             $cacheKey = sprintf(
                 'notif:%s:%s',
                 $user->getAuthIdentifier(),
                 $deptId ?: 'all'
             );
 
-            [$notifItems, $notifCount] = Cache::remember($cacheKey, now()->addSeconds(15), function () use ($deptId) {
-                // Base: hanya notifikasi yang belum dibaca
+            [$notifItems, $notifCount] = Cache::remember($cacheKey, now()->addSeconds(3), function () use ($deptId, $user) {
                 $query = Document::query()
-                    ->where('read_notifikasi', false);
+                    ->whereDoesntHave('notificationReaders', function ($readers) use ($user) {
+                        $readers->where('users.id', $user->id);
+                    });
 
                 // Jika user punya department:
                 // - dokumen milik departemen tsb, ATAU
                 // - dokumen yang terdistribusi ke departemen tsb
                 if (!empty($deptId)) {
-                    $query->where(function ($q) use ($deptId) {
+                    $query->where(function ($q) use ($deptId, $user) {
                         $q->where('department_id', $deptId)
                           ->orWhereHas('distributedDepartments', function ($qq) use ($deptId) {
                               $qq->where('departments.id', $deptId);
+                          })
+                          ->orWhereHas('distributedUsers', function ($qq) use ($user) {
+                              $qq->where('users.id', $user->id);
                           });
                     });
                 }
