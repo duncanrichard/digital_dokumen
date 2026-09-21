@@ -19,9 +19,9 @@ class DocumentAiSearchService
             $response = $request->post(config('document_ai.url').'/search', ['query' => $query, 'limit' => $limit])->throw();
             $ranked = collect($response->json('results', []));
             $ids = $ranked->pluck('document_id')->filter()->values();
-            if ($ids->isEmpty()) return $this->fallback($query, $limit)->all();
+            if ($ids->isEmpty()) return $this->fallback($query, $limit, $user)->all();
 
-            $documents = Document::with('department:id,name')->whereIn('id', $ids)->get()->keyBy('id');
+            $documents = $this->visibleDocuments($user)->whereIn('id', $ids)->get()->keyBy('id');
             return $ranked->map(function ($result) use ($documents) {
                 $document = $documents->get($result['document_id']);
                 if (!$document) return null;
@@ -31,7 +31,7 @@ class DocumentAiSearchService
             })->filter()->take($limit)->values()->all();
         } catch (\Throwable $exception) {
             report($exception);
-            return $this->fallback($query, $limit)->all();
+            return $this->fallback($query, $limit, $user)->all();
         }
     }
 
@@ -50,8 +50,20 @@ class DocumentAiSearchService
         } catch (\Throwable $exception) { report($exception); return false; }
     }
 
-    private function fallback(string $query, int $limit): Collection
+    private function fallback(string $query, int $limit, $user): Collection
     {
-        return Document::with('department:id,name')->search($query)->latest('publish_date')->limit($limit)->get();
+        return $this->visibleDocuments($user)->search($query)->latest('publish_date')->limit($limit)->get();
+    }
+
+    private function visibleDocuments($user)
+    {
+        $query = Document::with('department:id,name');
+        if (!$user || strcasecmp((string) optional($user->role)->name, 'Superadmin') === 0) return $query;
+
+        return $query->where(function ($allowed) use ($user) {
+            $allowed->where('department_id', $user->department_id)
+                ->orWhereHas('distributedDepartments', fn ($departments) => $departments->whereKey($user->department_id))
+                ->orWhereHas('distributedUsers', fn ($users) => $users->whereKey($user->id));
+        });
     }
 }
