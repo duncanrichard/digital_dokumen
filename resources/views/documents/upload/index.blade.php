@@ -89,7 +89,7 @@
   $canDelete      = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.delete'));
   $canChangeToNew = $isSuperadmin || ($role && $role->hasPermissionTo('documents.upload.change'));
 
-  $canturunanclinic = $isSuperadmin || ($me && $me->can('documents.upload.derive_clinic'));
+  $canturunanclinic = $isSuperadmin || ($me && $me->can('documents.upload.turunan_clinic'));
 
 @endphp
 

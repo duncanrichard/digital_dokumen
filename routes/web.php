@@ -55,7 +55,9 @@ Route::middleware('guest:web')->group(function () {
     Route::get('/', [LoginBasic::class, 'index'])->name('login');
 
     Route::get('/login', [LoginBasic::class, 'index'])->name('login.page');
-    Route::post('/login', [LoginBasic::class, 'authenticate'])->name('login.perform');
+    Route::post('/login', [LoginBasic::class, 'authenticate'])
+        ->middleware('throttle:5,1')
+        ->name('login.perform');
 });
 
 /*

@@ -49,12 +49,12 @@ class DocumentUploadController extends Controller
                     break;
 
                 case 'store':
-                    $from = (string) $request->input('_from', '');
-
-                    if ($from === 'change') {
+                    if ($request->filled('change_of')) {
                         $requiredPermission = 'documents.upload.change';
-                    } elseif ($from === 'derive_clinic') {
-                        $requiredPermission = 'documents.upload.derive_clinic';
+                    } elseif ($request->filled('derive_of')) {
+                        $requiredPermission = 'documents.upload.turunan_clinic';
+                    } elseif ($request->filled('revise_of')) {
+                        $requiredPermission = 'documents.revisions.create';
                     } else {
                         $requiredPermission = 'documents.upload.create';
                     }
@@ -239,6 +239,14 @@ class DocumentUploadController extends Controller
 
         $validated = $request->validate($rules);
 
+        $relatedDocumentId = $validated['revise_of'] ?? $validated['derive_of'] ?? $validated['change_of'] ?? null;
+        if ($relatedDocumentId) {
+            $this->ensureDocumentManagementAllowed(Document::findOrFail($relatedDocumentId));
+        }
+        if (! empty($validated['department_id'])) {
+            $this->ensureDepartmentManagementAllowed($validated['department_id']);
+        }
+
         $storedPath = $request->file('file')->store('documents', 'public');
         $isActive   = $request->has('is_active');
 
@@ -251,6 +259,7 @@ class DocumentUploadController extends Controller
             $maxRevision  = (int) Document::where('document_number', $base->document_number)->max('revision');
             $nextRevision = $maxRevision + 1;
 
+            try {
             DB::transaction(function () use ($validated, $base, $storedPath, $nextRevision, $isActive) {
                 Document::where('document_number', $base->document_number)
                     ->update(['is_active' => false]);
@@ -279,6 +288,12 @@ class DocumentUploadController extends Controller
                 $doc->distributedDepartments()->sync(!empty($baseDistIds) ? $baseDistIds : [$base->department_id]);
                 $doc->distributedUsers()->sync($base->distributedUsers->pluck('id')->all());
             });
+            } catch (\Throwable $exception) {
+                if (Storage::disk('public')->exists($storedPath)) {
+                    Storage::disk('public')->delete($storedPath);
+                }
+                throw $exception;
+            }
 
             return redirect()->route('documents.index')
                 ->with('success', "Document revised. New number: {$base->document_number} R{$nextRevision}");
@@ -353,6 +368,7 @@ class DocumentUploadController extends Controller
 
         $changeOfId = $validated['change_of'] ?? null;
 
+        try {
         DB::transaction(function () use (
             $validated,
             $jenis,
@@ -416,6 +432,12 @@ class DocumentUploadController extends Controller
                 }
             }
         });
+        } catch (\Throwable $exception) {
+            if (Storage::disk('public')->exists($storedPath)) {
+                Storage::disk('public')->delete($storedPath);
+            }
+            throw $exception;
+        }
 
         if ($changeOfId) {
             return redirect()->route('documents.index')
@@ -429,6 +451,8 @@ class DocumentUploadController extends Controller
     // ================== EDIT FORM ==================
     public function edit(Document $document)
     {
+        $this->ensureDocumentManagementAllowed($document);
+
         $documentTypes = JenisDokumen::where('is_active', true)
             ->orderBy('nama')->get(['id','kode','nama']);
 
@@ -445,6 +469,8 @@ class DocumentUploadController extends Controller
     // ================== UPDATE ==================
     public function update(Request $request, Document $document)
     {
+        $this->ensureDocumentManagementAllowed($document);
+
         $validated = $request->validate([
             'document_type_id'           => ['required','uuid','exists:jenis_dokumen,id'],
             'department_id'              => ['required','uuid','exists:departments,id'],
@@ -462,6 +488,7 @@ class DocumentUploadController extends Controller
 
         $jenis = JenisDokumen::select('id','kode')->findOrFail($validated['document_type_id']);
         $dept  = Department::select('id','code')->findOrFail($validated['department_id']);
+        $this->ensureDepartmentManagementAllowed($dept->id);
 
         $oldPath = $document->file_path;
         $newPath = $request->hasFile('file')
@@ -471,6 +498,7 @@ class DocumentUploadController extends Controller
         $renumber = ($document->jenis_dokumen_id !== $jenis->id) || ($document->department_id !== $dept->id);
         $isActive = $request->has('is_active');
 
+        try {
         DB::transaction(function () use ($validated, $document, $jenis, $dept, $newPath, $oldPath, $renumber, $isActive) {
             $payload = [
                 'jenis_dokumen_id' => $jenis->id,
@@ -506,7 +534,7 @@ class DocumentUploadController extends Controller
             }
 
             if ($newPath && $oldPath && Storage::disk('public')->exists($oldPath)) {
-                Storage::disk('public')->delete($oldPath);
+                DB::afterCommit(fn () => Storage::disk('public')->delete($oldPath));
             }
 
             if (!empty($validated['distribute_mode'])) {
@@ -523,6 +551,12 @@ class DocumentUploadController extends Controller
                 }
             }
         });
+        } catch (\Throwable $exception) {
+            if ($newPath && Storage::disk('public')->exists($newPath)) {
+                Storage::disk('public')->delete($newPath);
+            }
+            throw $exception;
+        }
 
         return redirect()->route('documents.index')
             ->with('success', 'Document updated successfully.');
@@ -531,9 +565,12 @@ class DocumentUploadController extends Controller
     // ================== DELETE ==================
     public function destroy(Document $document)
     {
+        $this->ensureDocumentManagementAllowed($document);
+
         DB::transaction(function () use ($document) {
             if ($document->file_path && Storage::disk('public')->exists($document->file_path)) {
-                Storage::disk('public')->delete($document->file_path);
+                $filePath = $document->file_path;
+                DB::afterCommit(fn () => Storage::disk('public')->delete($filePath));
             }
 
             if (method_exists($document, 'distributedDepartments')) {
@@ -545,6 +582,27 @@ class DocumentUploadController extends Controller
 
         return redirect()->route('documents.index')
             ->with('success', 'Document deleted.');
+    }
+
+    /** Only a document's owning department or Superadmin may alter its record or file. */
+    protected function ensureDocumentManagementAllowed(Document $document): void
+    {
+        $user = auth()->user();
+        $isSuperadmin = strcasecmp((string) optional($user?->role)->name, 'Superadmin') === 0;
+
+        if (! $isSuperadmin && (! $user?->department_id || (string) $document->department_id !== (string) $user->department_id)) {
+            abort(403, 'Anda hanya dapat mengelola dokumen milik divisi Anda.');
+        }
+    }
+
+    protected function ensureDepartmentManagementAllowed(string $departmentId): void
+    {
+        $user = auth()->user();
+        $isSuperadmin = strcasecmp((string) optional($user?->role)->name, 'Superadmin') === 0;
+
+        if (! $isSuperadmin && (! $user?->department_id || (string) $departmentId !== (string) $user->department_id)) {
+            abort(403, 'Anda hanya dapat membuat atau memindahkan dokumen dalam divisi Anda.');
+        }
     }
 
     /**

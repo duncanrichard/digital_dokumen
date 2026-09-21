@@ -3,9 +3,8 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
+use App\Models\Permission;
 
 class DocumentRevisionPermissionSeeder extends Seeder
 {
@@ -14,25 +13,8 @@ class DocumentRevisionPermissionSeeder extends Seeder
         // Bersihkan cache permission Spatie
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        $name      = 'documents.revisions.view';
-        $guardName = 'web';
-
-        // Cek apakah permission sudah ada
-        $exists = DB::table('permissions')
-            ->where('name', $name)
-            ->where('guard_name', $guardName)
-            ->exists();
-
-        if (! $exists) {
-            $now = now();
-
-            DB::table('permissions')->insert([
-                'id'         => (string) Str::uuid(),   // kolom id NOT NULL, jadi isi manual
-                'name'       => $name,
-                'guard_name' => $guardName,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+        foreach (['documents.revisions.view', 'documents.revisions.create'] as $name) {
+            Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
         }
 
         // (Opsional) auto kasih ke role tertentu:

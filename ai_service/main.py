@@ -3,6 +3,10 @@ import json
 import os
 from pathlib import Path
 
+# Abaikan proxy lokal yang tidak aktif; model sudah tersimpan di cache lokal.
+for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "ALL_PROXY", "all_proxy"):
+    os.environ.pop(proxy, None)
+
 import fitz
 import numpy as np
 from fastapi import FastAPI, Header, HTTPException
@@ -13,7 +17,7 @@ APP_DIR = Path(__file__).parent
 DATA_FILE = APP_DIR / "data" / "documents.npz"
 TOKEN = os.getenv("DOCUMENT_AI_TOKEN", "")
 MODEL = os.getenv("DOCUMENT_AI_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
-model = SentenceTransformer(MODEL)
+model = SentenceTransformer(MODEL, local_files_only=True)
 app = FastAPI(title="Document AI", version="1.0")
 
 class IndexRequest(BaseModel):
@@ -80,17 +84,22 @@ def search(request: SearchRequest, authorization: str | None = Header(default=No
     authorize(authorization)
     documents, vectors = load_index()
     if not documents: return {"results": []}
+    terms = request.query.lower().split()
+    exact_only = len(terms) == 1 and len(terms[0]) >= 3
+    if exact_only:
+        matches = [doc for doc in documents if terms[0] in doc.get("content", "")]
+        return {"results": [{k: v for k, v in doc.items() if k != "content"} | {"score": 1.0} for doc in matches[:request.limit]]}
     query = model.encode([request.query], normalize_embeddings=True)[0]
     scores = vectors @ query
     order = np.argsort(scores)[::-1]
     # Satu kata biasanya nomor/nama spesifik; jangan mengembalikan kecocokan
     # semantik yang tidak benar-benar memuat kata tersebut.
-    terms = request.query.lower().split()
-    exact_only = len(terms) == 1 and len(terms[0]) >= 3
     results = []
     for i in order:
-        if scores[i] <= 0.35: continue
         if exact_only and terms[0] not in documents[i].get("content", ""): continue
+        # Kata yang benar-benar ada pada isi PDF harus selalu ditemukan;
+        # ambang semantik hanya dipakai untuk pencarian frasa/konteks.
+        if not exact_only and scores[i] <= 0.35: continue
         results.append({k: v for k, v in documents[i].items() if k != "content"} | {"score": round(float(scores[i]), 4)})
         if len(results) >= request.limit: break
     return {"results": results}

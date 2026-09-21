@@ -43,13 +43,20 @@ class DocumentDistributionMail extends Mailable
                 $this->user
             );
 
-            $email->attach(
-                $watermarkedPath,
-                [
-                    'as'   => $this->document->document_number . '.pdf',
-                    'mime' => 'application/pdf',
-                ]
-            );
+            $originalPath = Storage::disk('public')->path($this->document->file_path);
+            $attachmentName = $this->document->document_number . '.pdf';
+
+            if ($watermarkedPath !== $originalPath) {
+                try {
+                    $email->attachData(file_get_contents($watermarkedPath), $attachmentName, ['mime' => 'application/pdf']);
+                } finally {
+                    if (is_file($watermarkedPath)) {
+                        @unlink($watermarkedPath);
+                    }
+                }
+            } else {
+                $email->attach($originalPath, ['as' => $attachmentName, 'mime' => 'application/pdf']);
+            }
         }
 
         return $email;

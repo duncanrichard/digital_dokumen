@@ -30,8 +30,11 @@ class DocumentAccessApprovalController extends Controller
 
             // cek permission pada ROLE (bukan $user->can)
             // nama permission HARUS sama dengan di seeder
+            $permission = in_array($request->route()->getActionMethod(), ['approve', 'reject'], true)
+                ? 'documents.access-approvals.decide'
+                : 'documents.access-approvals.view';
             $hasPermission = $role && $role->permissions()
-                ->where('name', 'documents.access-approvals.view')
+                ->where('name', $permission)
                 ->where('guard_name', 'web')
                 ->exists();
 

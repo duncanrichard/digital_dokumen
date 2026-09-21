@@ -73,6 +73,8 @@ class RoleController extends Controller
             $validated['guard_name'] = 'web';
         }
 
+        $this->ensureSuperadminRoleProtected($validated['name']);
+
         Role::create($validated);
 
         return redirect()
@@ -93,6 +95,8 @@ class RoleController extends Controller
         if (empty($validated['guard_name'])) {
             $validated['guard_name'] = 'web';
         }
+
+        $this->ensureSuperadminRoleProtected($validated['name'], $role);
 
         $role->update($validated);
 
@@ -118,5 +122,17 @@ class RoleController extends Controller
         return redirect()
             ->route('access.roles.index')
             ->with('success', 'Role berhasil dihapus.');
+    }
+
+    /** Prevent a role-management user from creating a Superadmin bypass. */
+    protected function ensureSuperadminRoleProtected(string $requestedName, ?Role $target = null): void
+    {
+        $actorIsSuperadmin = strcasecmp((string) optional(auth()->user()?->role)->name, 'Superadmin') === 0;
+        $targetIsSuperadmin = $target && strcasecmp((string) $target->name, 'Superadmin') === 0;
+        $requestsSuperadmin = strcasecmp($requestedName, 'Superadmin') === 0;
+
+        if (! $actorIsSuperadmin && ($targetIsSuperadmin || $requestsSuperadmin)) {
+            abort(403, 'Hanya Superadmin yang dapat membuat atau mengubah role Superadmin.');
+        }
     }
 }

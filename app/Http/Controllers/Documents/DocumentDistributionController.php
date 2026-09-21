@@ -16,11 +16,6 @@ use App\Services\DocumentNotificationBroadcaster;
 
 class DocumentDistributionController extends Controller
 {
-    /**
-     * ✅ Token API Fonnte (Authorization) - TETAP SAMA
-     */
-    private string $FONNTE_TOKEN = 'PhGFz3Zruiy64MDAcKEf';
-
     public function __construct()
     {
         $this->middleware(function ($request, $next) {
@@ -33,7 +28,10 @@ class DocumentDistributionController extends Controller
             $isSuperadmin = $roleName && strcasecmp($roleName, 'Superadmin') === 0;
             if ($isSuperadmin) return $next($request);
 
-            $hasPermission = $role && $role->hasPermissionTo('documents.distribution.view');
+            $permission = $request->route()->getActionMethod() === 'store'
+                ? 'documents.distribution.update'
+                : 'documents.distribution.view';
+            $hasPermission = $role && $role->hasPermissionTo($permission);
             if (!$hasPermission) abort(403, 'Anda tidak memiliki izin untuk mengakses halaman Distribusi Dokumen.');
 
             return $next($request);
@@ -43,6 +41,8 @@ class DocumentDistributionController extends Controller
     public function index(Request $request)
     {
         $q = trim((string) $request->query('q', ''));
+        $user = $request->user();
+        $isSuperadmin = strcasecmp((string) optional($user?->role)->name, 'Superadmin') === 0;
 
         $documentIds = $request->query('document_ids', []);
         if (!is_array($documentIds)) $documentIds = [$documentIds];
@@ -53,6 +53,13 @@ class DocumentDistributionController extends Controller
 
         $docs = Document::query()
             ->where('is_active', true)
+            ->when(! $isSuperadmin, function ($documents) use ($user) {
+                if (! $user?->department_id) {
+                    $documents->whereRaw('1 = 0');
+                    return;
+                }
+                $documents->where('department_id', $user->department_id);
+            })
             ->when($q !== '', function ($qq) use ($q, $likeOp) {
                 $qq->where(function ($sub) use ($q, $likeOp) {
                     $sub->where('name', $likeOp, "%{$q}%")
@@ -158,15 +165,24 @@ class DocumentDistributionController extends Controller
         ]);
 
         $documentIds = array_values(array_unique(array_map('strval', $data['document_ids'] ?? [])));
+        $user = $request->user();
+        $isSuperadmin = strcasecmp((string) optional($user?->role)->name, 'Superadmin') === 0;
 
         $documents = Document::whereIn('id', $documentIds)
             ->where('is_active', true)
+            ->when(! $isSuperadmin, function ($documents) use ($user) {
+                if (! $user?->department_id) {
+                    $documents->whereRaw('1 = 0');
+                    return;
+                }
+                $documents->where('department_id', $user->department_id);
+            })
             ->get();
 
-        if ($documents->isEmpty()) {
+        if ($documents->isEmpty() || $documents->count() !== count($documentIds)) {
             return redirect()
                 ->route('documents.distribution.index')
-                ->withErrors(['document_ids' => 'Tidak ada dokumen yang valid/aktif.']);
+                ->withErrors(['document_ids' => 'Dokumen tidak valid atau Anda tidak berhak mengatur distribusinya.']);
         }
 
         $distributionInput = $data['distribution'] ?? [];
@@ -271,12 +287,12 @@ class DocumentDistributionController extends Controller
      * - personal: target = departments.no_wa
      * - group   : target = departments.fonnte_token (isi: 1203xxx@g.us)
      *
-     * Authorization tetap pakai $this->FONNTE_TOKEN
+     * Authorization memakai token dari environment.
      */
     protected function sendWhatsappNotifications($documents, array $perDocDeptIds): void
     {
         try {
-            $token  = trim($this->FONNTE_TOKEN);
+            $token  = trim((string) config('services.fonnte.token'));
             $appUrl = rtrim(config('app.url') ?: url('/'), '/') . '/';
 
             if ($token === '') {

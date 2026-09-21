@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\User;
 use App\Models\WatermarkSetting;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use App\Services\PdfWithRotation;
 
 class DocumentWatermarkService
@@ -35,9 +36,7 @@ class DocumentWatermarkService
         }
 
         // nama file sementara
-        $tempFileName = 'wm_'
-            . ($document->document_number ?: $document->id)
-            . '_' . uniqid() . '.pdf';
+        $tempFileName = 'wm_' . $document->id . '_' . Str::uuid() . '.pdf';
 
         $tempRelativePath = 'temp/' . $tempFileName;
         $tempFullPath     = storage_path('app/public/' . $tempRelativePath);
@@ -52,9 +51,12 @@ class DocumentWatermarkService
             $text = strtr($setting->text_template, [
                 '{user_name}'       => optional($user)->name ?? '',
                 '{user_username}'   => optional($user)->username ?? '',
+                '{user.name}'       => optional($user)->name ?? '',
+                '{user.username}'   => optional($user)->username ?? '',
                 '{department}'      => optional($department)->name ?? '',
                 '{document_number}' => $document->document_number ?? '',
                 '{document_name}'   => $document->name ?? '',
+                '{date}'            => now()->format('Y-m-d'),
             ]);
         }
 
@@ -84,13 +86,22 @@ class DocumentWatermarkService
             $pdf->AddPage($orientation, [$size['width'], $size['height']]);
             $pdf->useTemplate($tplId);
 
-            // set font dan warna watermark
-            $pdf->SetFont('Helvetica', 'B', $fontSize);
-            $pdf->SetTextColor($r, $g, $b);
-
             // hitung posisi (sederhana: tengah halaman)
             $x = $size['width'] / 2;
             $y = $size['height'] / 2;
+
+            if ($setting->mode === 'image' && $setting->image_path) {
+                $imageRelativePath = preg_replace('#^storage/#', '', $setting->image_path);
+                $imagePath = Storage::disk('public')->path($imageRelativePath);
+                if (is_file($imagePath)) {
+                    $pdf->Image($imagePath, $x - 25, $y - 25, 50, 50);
+                    continue;
+                }
+            }
+
+            // set font dan warna watermark
+            $pdf->SetFont('Helvetica', 'B', $fontSize);
+            $pdf->SetTextColor($r, $g, $b);
 
             // rotasi sederhana
             if ($angle != 0) {

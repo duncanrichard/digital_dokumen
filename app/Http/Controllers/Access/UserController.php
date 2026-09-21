@@ -159,6 +159,8 @@ class UserController extends Controller
             'is_active'     => ['nullable', 'in:1'],
         ]);
 
+        $this->ensureRoleAssignmentAllowed($request->user(), $validated['role_id'] ?? null);
+
         DB::transaction(function () use ($validated, $request) {
             $hrisEmployee = null;
 
@@ -200,7 +202,7 @@ class UserController extends Controller
                 ]);
             }
 
-            User::create([
+            $user = User::create([
                 'hris_employee_id' => $validated['hris_employee_id'] ?? null,
                 'name'             => $name,
                 'username'         => $username,
@@ -211,6 +213,8 @@ class UserController extends Controller
                 'password'         => $password,
                 'is_active'        => $request->has('is_active'),
             ]);
+
+            $this->syncSpatieRole($user);
         });
 
         return redirect()->route('access.users.index')
@@ -234,6 +238,8 @@ class UserController extends Controller
             'password'      => ['nullable', 'confirmed', Rules\Password::defaults()],
             'is_active'     => ['nullable', 'in:1'],
         ]);
+
+        $this->ensureRoleAssignmentAllowed($request->user(), $validated['role_id'] ?? $user->role_id, $user);
 
         DB::transaction(function () use ($validated, $request, $user) {
             $hrisEmployeeId = $user->hris_employee_id ?: ($validated['hris_employee_id'] ?? null);
@@ -295,6 +301,7 @@ class UserController extends Controller
             }
 
             $user->update($payload);
+            $this->syncSpatieRole($user->fresh());
         });
 
         return redirect()->route('access.users.index', ['edit' => $user->id])
@@ -303,12 +310,46 @@ class UserController extends Controller
 
     public function destroy(User $user)
     {
+        $this->ensureTargetUserAllowed(auth()->user(), $user);
+
         DB::transaction(function () use ($user) {
             $user->delete();
         });
 
         return redirect()->route('access.users.index')
             ->with('success', 'User successfully deleted.');
+    }
+
+    /** Keep users.role_id and Spatie's role pivot in sync. */
+    protected function syncSpatieRole(User $user): void
+    {
+        $role = $user->role;
+        $role ? $user->syncRoles([$role]) : $user->syncRoles([]);
+    }
+
+    /** Non-superadmins may not create, assign, alter, or delete Superadmin accounts. */
+    protected function ensureRoleAssignmentAllowed(?User $actor, ?string $roleId, ?User $target = null): void
+    {
+        $isSuperadmin = strcasecmp((string) optional($actor?->role)->name, 'Superadmin') === 0;
+        $requestedRole = $roleId ? Role::find($roleId) : null;
+
+        if (! $isSuperadmin && strcasecmp((string) optional($requestedRole)->name, 'Superadmin') === 0) {
+            abort(403, 'Hanya Superadmin yang dapat memberikan role Superadmin.');
+        }
+
+        if ($target) {
+            $this->ensureTargetUserAllowed($actor, $target);
+        }
+    }
+
+    protected function ensureTargetUserAllowed(?User $actor, User $target): void
+    {
+        $isSuperadmin = strcasecmp((string) optional($actor?->role)->name, 'Superadmin') === 0;
+        $targetIsSuperadmin = strcasecmp((string) optional($target->role)->name, 'Superadmin') === 0;
+
+        if (! $isSuperadmin && $targetIsSuperadmin) {
+            abort(403, 'Akun Superadmin hanya dapat dikelola oleh Superadmin.');
+        }
     }
 
     protected function syncHrisUsers(): void

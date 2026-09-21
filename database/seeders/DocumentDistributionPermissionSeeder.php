@@ -18,6 +18,7 @@ class DocumentDistributionPermissionSeeder extends Seeder
         // ===========================================
         $permissions = [
             'documents.distribution.view',   // akses halaman distribusi
+            'documents.distribution.update', // simpan perubahan distribusi
         ];
 
         foreach ($permissions as $permName) {

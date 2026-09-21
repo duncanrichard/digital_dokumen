@@ -14,6 +14,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
 use App\Events\DocumentNotificationUpdated;
 use App\Services\DocumentAiSearchService;
+use App\Services\DocumentWatermarkService;
 
 class DocumentGalleryController extends Controller
 {
@@ -298,8 +299,11 @@ class DocumentGalleryController extends Controller
         DB::table('document_access_requests')->insert($insert);
 
         // Beri tahu approver secara realtime bahwa ada permintaan baru.
-        $approverIds = \App\Models\User::whereHas('roles.permissions', function ($q) {
-            $q->where('name', 'documents.access-approvals.view')->where('guard_name', 'web');
+        $approverIds = \App\Models\User::where(function ($users) {
+            $users->whereHas('role', fn ($role) => $role->whereRaw('LOWER(name) = ?', ['superadmin']))
+                ->orWhereHas('role.permissions', function ($permissions) {
+                    $permissions->where('name', 'documents.access-approvals.decide')->where('guard_name', 'web');
+                });
         })->pluck('id');
         foreach ($approverIds as $approverId) {
             rescue(fn () => DocumentNotificationUpdated::dispatch((string) $approverId, (string) $document->id), report: true);
@@ -364,13 +368,31 @@ class DocumentGalleryController extends Controller
         $isUnlocked = ($isSuperadmin || $isOwnerDept || $isDistributedToMe || $isDistributedToUser || $isApproved);
         if (!$isUnlocked) abort(403, 'Unauthorized.');
 
-        return Storage::disk('public')->response(
-            $document->file_path,
-            basename($document->file_path),
-            [
-                'Content-Type'        => 'application/pdf',
-                'Content-Disposition' => 'inline; filename="' . basename($document->file_path) . '"',
-            ]
-        );
+        $originalPath = Storage::disk('public')->path($document->file_path);
+        try {
+            $watermarkedPath = app(DocumentWatermarkService::class)->makeWatermarkedCopy(
+                $document,
+                $document->department,
+                $me
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+            abort(500, 'Dokumen tidak dapat diproses dengan watermark.');
+        }
+        $removeAfterSend = $watermarkedPath !== $originalPath;
+
+        return response()->stream(function () use ($watermarkedPath, $removeAfterSend) {
+            try {
+                readfile($watermarkedPath);
+            } finally {
+                if ($removeAfterSend && is_file($watermarkedPath)) {
+                    @unlink($watermarkedPath);
+                }
+            }
+        }, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="' . basename($document->file_path) . '"',
+            'Content-Length'      => (string) filesize($watermarkedPath),
+        ]);
     }
 }

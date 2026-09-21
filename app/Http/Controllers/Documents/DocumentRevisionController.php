@@ -34,8 +34,11 @@ class DocumentRevisionController extends Controller
 
             // CEK PERMISSION BERDASARKAN ROLE
             // pastikan nama permission sama persis dg di seeder & di tabel permissions
+            $permission = $request->route()->getActionMethod() === 'store'
+                ? 'documents.revisions.create'
+                : 'documents.revisions.view';
             $hasPermission = $role && $role->permissions()
-                ->where('name', 'documents.revisions.view')
+                ->where('name', $permission)
                 ->where('guard_name', 'web')
                 ->exists();
 
@@ -115,10 +118,13 @@ class DocumentRevisionController extends Controller
         $base = Document::with(['jenisDokumen:id,kode', 'department:id,code', 'distributedDepartments:id', 'distributedUsers:id'])
             ->findOrFail($validated['base_id']);
 
+        $this->ensureDocumentRevisionAllowed($base);
+
         // Revisi maksimum dari nomor dasar ini
         $maxRevision  = (int) Document::where('document_number', $base->document_number)->max('revision');
         $nextRevision = $maxRevision + 1;
 
+        try {
         DB::transaction(function () use ($validated, $base, $storedPath, $nextRevision, $request) {
             // Nonaktifkan semua versi lama
             Document::where('document_number', $base->document_number)->update(['is_active' => false]);
@@ -140,9 +146,25 @@ class DocumentRevisionController extends Controller
             $revision->distributedDepartments()->sync($base->distributedDepartments->pluck('id')->all());
             $revision->distributedUsers()->sync($base->distributedUsers->pluck('id')->all());
         });
+        } catch (\Throwable $exception) {
+            if (Storage::disk('public')->exists($storedPath)) {
+                Storage::disk('public')->delete($storedPath);
+            }
+            throw $exception;
+        }
 
         return redirect()
             ->route('documents.revisions.index')
             ->with('success', "Revision created: {$base->document_number} R{$nextRevision}");
+    }
+
+    protected function ensureDocumentRevisionAllowed(Document $document): void
+    {
+        $user = auth()->user();
+        $isSuperadmin = strcasecmp((string) optional($user?->role)->name, 'Superadmin') === 0;
+
+        if (! $isSuperadmin && (! $user?->department_id || (string) $document->department_id !== (string) $user->department_id)) {
+            abort(403, 'Anda hanya dapat merevisi dokumen milik divisi Anda.');
+        }
     }
 }

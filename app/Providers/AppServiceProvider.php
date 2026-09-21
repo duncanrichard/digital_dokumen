@@ -62,6 +62,7 @@ class AppServiceProvider extends ServiceProvider
 
             $user = Auth::user();
             $deptId = $user->department_id; // bisa null
+            $isSuperadmin = strcasecmp((string) optional($user->role)->name, 'Superadmin') === 0;
 
             // Cache sangat singkat; navbar juga memperbarui data lewat feed realtime.
             $cacheKey = sprintf(
@@ -70,7 +71,7 @@ class AppServiceProvider extends ServiceProvider
                 $deptId ?: 'all'
             );
 
-            [$notifItems, $notifCount] = Cache::remember($cacheKey, now()->addSeconds(3), function () use ($deptId, $user) {
+            [$notifItems, $notifCount] = Cache::remember($cacheKey, now()->addSeconds(3), function () use ($deptId, $user, $isSuperadmin) {
                 $query = Document::query()
                     ->whereDoesntHave('notificationReaders', function ($readers) use ($user) {
                         $readers->where('users.id', $user->id);
@@ -79,7 +80,9 @@ class AppServiceProvider extends ServiceProvider
                 // Jika user punya department:
                 // - dokumen milik departemen tsb, ATAU
                 // - dokumen yang terdistribusi ke departemen tsb
-                if (!empty($deptId)) {
+                if ($isSuperadmin) {
+                    // Superadmin may view all notification items.
+                } elseif (!empty($deptId)) {
                     $query->where(function ($q) use ($deptId, $user) {
                         $q->where('department_id', $deptId)
                           ->orWhereHas('distributedDepartments', function ($qq) use ($deptId) {
@@ -90,7 +93,11 @@ class AppServiceProvider extends ServiceProvider
                           });
                     });
                 }
-                // Jika user TIDAK punya department → jangan difilter (tampilkan semua)
+                if (empty($deptId)) {
+                    $query->whereHas('distributedUsers', function ($qq) use ($user) {
+                        $qq->where('users.id', $user->id);
+                    });
+                }
 
                 $items = (clone $query)
                     ->orderByDesc('created_at')

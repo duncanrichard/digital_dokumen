@@ -3,9 +3,8 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Spatie\Permission\PermissionRegistrar;
+use App\Models\Permission;
 
 class DocumentAccessApprovalPermissionSeeder extends Seeder
 {
@@ -14,25 +13,8 @@ class DocumentAccessApprovalPermissionSeeder extends Seeder
         // bersihkan cache permission Spatie
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        $name      = 'documents.access-approvals.view';
-        $guardName = 'web';
-
-        // cek apakah permission sudah ada
-        $exists = DB::table('permissions')
-            ->where('name', $name)
-            ->where('guard_name', $guardName)
-            ->exists();
-
-        if (! $exists) {
-            $now = now();
-
-            DB::table('permissions')->insert([
-                'id'         => (string) Str::uuid(),   // wajib diisi untuk PostgreSQL (uuid / not null)
-                'name'       => $name,
-                'guard_name' => $guardName,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+        foreach (['documents.access-approvals.view', 'documents.access-approvals.decide'] as $name) {
+            Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
         }
 
         // opsional: kalau mau langsung diberikan ke role tertentu
