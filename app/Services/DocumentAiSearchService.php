@@ -37,6 +37,7 @@ class DocumentAiSearchService
 
     public function index(Document $document): bool
     {
+        $document->loadMissing('jenisDokumen:id,kode,nama', 'department:id,code,name');
         $path = storage_path('app/public/'.$document->file_path);
         if (!$document->file_path || !is_file($path)) return false;
         try {
@@ -45,6 +46,11 @@ class DocumentAiSearchService
             $request->post(config('document_ai.url').'/index', [
                 'document_id' => (string) $document->id, 'file_path' => $path,
                 'title' => $document->name, 'document_number' => $document->document_number,
+                'document_type' => trim(($document->jenisDokumen?->kode ?? '').' '.($document->jenisDokumen?->nama ?? '')),
+                'department' => trim(($document->department?->code ?? '').' '.($document->department?->name ?? '')),
+                'publish_date' => optional($document->publish_date)->format('Y-m-d') ?? '',
+                'notes' => $document->notes ?? '',
+                'status' => $document->is_active ? 'aktif' : 'nonaktif',
             ])->throw();
             return true;
         } catch (\Throwable $exception) { report($exception); return false; }

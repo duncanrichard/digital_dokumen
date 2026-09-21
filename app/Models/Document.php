@@ -50,6 +50,14 @@ class Document extends Model
         'document_number' => 'string',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function (self $document) {
+            // Kegagalan layanan AI tidak boleh menggagalkan simpan dokumen.
+            rescue(fn () => app(\App\Services\DocumentAiSearchService::class)->index($document), report: true);
+        });
+    }
+
     /* =======================
      |  RELATIONS
      ======================= */

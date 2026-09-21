@@ -21,6 +21,11 @@ class IndexRequest(BaseModel):
     file_path: str
     title: str = ""
     document_number: str = ""
+    document_type: str = ""
+    department: str = ""
+    publish_date: str = ""
+    notes: str = ""
+    status: str = ""
 
 class SearchRequest(BaseModel):
     query: str = Field(min_length=2, max_length=200)
@@ -57,7 +62,10 @@ def index_document(item: IndexRequest, authorization: str | None = Header(defaul
     text = extract_text(item.file_path).strip()
     if not text: raise HTTPException(422, "PDF tidak memiliki teks. Gunakan OCR untuk PDF hasil scan.")
     excerpt = " ".join(text.split())[:500]
-    content = f"{item.title}\n{item.document_number}\n{text[:12000]}"
+    content = "\n".join([
+        item.title, item.document_number, item.document_type, item.department,
+        item.publish_date, item.status, item.notes, text[:12000],
+    ])
     vector = model.encode([content], normalize_embeddings=True).astype(np.float32)
     documents, vectors = load_index()
     documents = [doc for doc in documents if doc["document_id"] != item.document_id]
