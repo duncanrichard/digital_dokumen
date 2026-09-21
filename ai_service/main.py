@@ -71,7 +71,7 @@ def index_document(item: IndexRequest, authorization: str | None = Header(defaul
     documents = [doc for doc in documents if doc["document_id"] != item.document_id]
     vectors = np.array([vectors[i] for i, doc in enumerate(load_index()[0]) if doc["document_id"] != item.document_id], dtype=np.float32)
     if vectors.size == 0: vectors = np.empty((0, vector.shape[1]), dtype=np.float32)
-    documents.append({"document_id": item.document_id, "excerpt": excerpt})
+    documents.append({"document_id": item.document_id, "excerpt": excerpt, "content": content.lower()})
     save_index(documents, np.vstack([vectors, vector]))
     return {"indexed": item.document_id}
 
@@ -82,5 +82,15 @@ def search(request: SearchRequest, authorization: str | None = Header(default=No
     if not documents: return {"results": []}
     query = model.encode([request.query], normalize_embeddings=True)[0]
     scores = vectors @ query
-    order = np.argsort(scores)[::-1][:request.limit]
-    return {"results": [{**documents[i], "score": round(float(scores[i]), 4)} for i in order if scores[i] > 0.20]}
+    order = np.argsort(scores)[::-1]
+    # Satu kata biasanya nomor/nama spesifik; jangan mengembalikan kecocokan
+    # semantik yang tidak benar-benar memuat kata tersebut.
+    terms = request.query.lower().split()
+    exact_only = len(terms) == 1 and len(terms[0]) >= 3
+    results = []
+    for i in order:
+        if scores[i] <= 0.35: continue
+        if exact_only and terms[0] not in documents[i].get("content", ""): continue
+        results.append({k: v for k, v in documents[i].items() if k != "content"} | {"score": round(float(scores[i]), 4)})
+        if len(results) >= request.limit: break
+    return {"results": results}
