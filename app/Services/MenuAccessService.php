@@ -27,7 +27,6 @@ class MenuAccessService
         '/access/permissions' => ['access.permissions.view'],
         '/settings/watermark' => ['settings.watermark.view'],
         '/settings/document-access' => ['settings.document-access.view'],
-        '/system/framework' => ['system.framework.view'],
     ];
 
     public function filter(iterable $menus, ?User $user): Collection

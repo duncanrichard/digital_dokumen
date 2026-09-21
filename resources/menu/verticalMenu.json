@@ -89,17 +89,12 @@
       "url": "javascript:void(0);",
       "name": "Settings",
       "icon": "menu-icon tf-icons mdi mdi-cog-outline",
-      "slug": ["settings.", "system."],
+      "slug": ["settings."],
       "submenu": [
         {
           "url": "/settings/watermark",
           "name": "Watermark/DRM",
           "slug": "settings.watermark"
-        },
-        {
-          "url": "/system/framework",
-          "name": "Framework System",
-          "slug": "system.framework"
         },
         {
           "url": "/settings/document-access",

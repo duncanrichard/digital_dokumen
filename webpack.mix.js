@@ -131,6 +131,13 @@ mix.js('resources/js/realtime.js', 'public/js');
 
 mix.version();
 
+// Notifikasi desktop tidak tersedia pada server produksi atau sesi terminal
+// non-GUI. Tanpa ini, webpack dapat sukses mengompilasi tetapi tetap keluar
+// dengan error dari node-notifier.
+if (mix.inProduction()) {
+  mix.disableNotifications();
+}
+
 /*
  |--------------------------------------------------------------------------
  | Browsersync Reloading
@@ -142,4 +149,8 @@ mix.version();
  | Refer official documentation for more information: https://laravel.com/docs/10.x/mix#browsersync-reloading
  */
 
-mix.browserSync('http://127.0.0.1:8000/');
+// BrowserSync hanya diperlukan saat pengembangan lokal. Menjalankannya pada
+// build produksi dapat memicu node-notifier, yang gagal pada server tanpa GUI.
+if (!mix.inProduction()) {
+  mix.browserSync('http://127.0.0.1:8000/');
+}
