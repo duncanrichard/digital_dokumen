@@ -382,8 +382,7 @@
                                              data-name="{{ $row->name }}"
                                              data-publish_date="{{ \Carbon\Carbon::parse($row->publish_date)->format('Y-m-d') }}"
                                              data-is_active="{{ $row->is_active ? 1 : 0 }}"
-                                             data-notes="{{ $row->notes ?? '' }}"
-                                             data-bs-toggle="modal" data-bs-target="#editModal">
+                                             data-notes="{{ $row->notes ?? '' }}">
                                             <i class="mdi mdi-pencil-outline me-2"></i><strong>Edit metadata</strong>
                                             <span class="action-help">Perbaiki nama, tanggal, status, atau file.</span>
                                           </a>
@@ -1020,6 +1019,17 @@
       $('#changeModal').on('shown.bs.modal', function () { initSelect2(this); toggleDistribution('change'); });
       $('#deriveClinicModal').on('shown.bs.modal', function () { initSelect2(this); });
 
+      // Pastikan backdrop Bootstrap dibersihkan setelah modal ditutup. Ini juga
+      // memulihkan halaman bila sebelumnya ada backdrop yang tertinggal.
+      $('.modal').on('hidden.bs.modal', function () {
+        if (document.querySelector('.modal.show')) return;
+
+        document.querySelectorAll('.modal-backdrop').forEach((backdrop) => backdrop.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+      });
+
       // Toggle distribution wrap
       $(document).on('change', 'input[name="distribute_mode"]', function () {
         if (this.id.startsWith('create_')) toggleDistribution('create');
@@ -1099,7 +1109,7 @@
         toggleDistribution('edit');
 
         const modal = document.getElementById('editModal');
-        const bsModal = new bootstrap.Modal(modal);
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
         bsModal.show();
         setTimeout(() => { initSelect2(modal); toggleDistribution('edit'); }, 100);
       });
@@ -1126,7 +1136,7 @@
         toggleDistribution('change');
 
         const modal = document.getElementById('changeModal');
-        const bsModal = new bootstrap.Modal(modal);
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
         bsModal.show();
         setTimeout(() => { initSelect2(modal); toggleDistribution('change'); }, 100);
       });
@@ -1144,7 +1154,7 @@
         $('#derive_clinic_id').val('').trigger('change');
 
         const modal = document.getElementById('deriveClinicModal');
-        const bsModal = new bootstrap.Modal(modal);
+        const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
         bsModal.show();
         setTimeout(() => { initSelect2(modal); }, 100);
       });
