@@ -63,7 +63,18 @@ class DocumentAiSearchService
         return $query->where(function ($allowed) use ($user) {
             $allowed->where('department_id', $user->department_id)
                 ->orWhereHas('distributedDepartments', fn ($departments) => $departments->whereKey($user->department_id))
-                ->orWhereHas('distributedUsers', fn ($users) => $users->whereKey($user->id));
+                ->orWhereHas('distributedUsers', fn ($users) => $users->whereKey($user->id))
+                ->orWhereExists(function ($requests) use ($user) {
+                    $requests->selectRaw('1')
+                        ->from('document_access_requests')
+                        ->whereColumn('document_access_requests.document_id', 'documents.id')
+                        ->where('document_access_requests.requester_user_id', $user->id)
+                        ->whereRaw("UPPER(document_access_requests.status) = 'APPROVED'")
+                        ->where(function ($valid) {
+                            $valid->whereNull('document_access_requests.access_expires_at')
+                                ->orWhere('document_access_requests.access_expires_at', '>', now());
+                        });
+                });
         });
     }
 }
